@@ -1,10 +1,10 @@
 import csv
 from multiprocessing import Pool, cpu_count
 
-
 import numpy as np
-from scipy.integrate import solve_ivp
 from daceypy import DA, array
+from scipy.integrate import solve_ivp
+
 
 from utils.libration_sense import (
     CR3BP,
@@ -111,10 +111,10 @@ def process_halodot(args):
 
 if __name__ == "__main__":
     # Порядок полиномиальной аппроксимации, который проверяется
-    ord = 6
+    ord = 7
 
     # Файл для записи результатов
-    filepath="L1-192-results/6th_order.csv"
+    filepath="L1-192-results/7th_order.csv"
     
     # Гало-орбита из каталога
     haloorbit_type = 'L1'
@@ -136,7 +136,7 @@ if __name__ == "__main__":
         for i, halodot in enumerate(halodots)
     ]
 
-    # Запуск в пулле процессов
+    # Параллельное вычисление
     with Pool(cpu_count()) as pool:
         results_list = pool.map(process_halodot, args_list)
 
