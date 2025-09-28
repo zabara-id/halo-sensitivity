@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # --- Папка с CSV ---
-dir_path = "L1-192-results"  # при необходимости поменяйте
+dir_path = "data/output/L1-192-results"
 
 # --- генерация имени файла по порядку ---
 def fname(order: int) -> str:
