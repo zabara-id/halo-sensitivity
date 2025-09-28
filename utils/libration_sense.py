@@ -571,9 +571,6 @@ def get_xf(orbit_type: str,
         initial_state[4] += halo_orbit_dot[4]
         initial_state[5] += halo_orbit_dot[5]
 
-        print('IS: ', type(initial_state))
-        print('T: ', type(T))
-
     with DA.cache_manager():  # optional, for efficiency
         xf = RK78(initial_state, 0.0, number_of_turns * T, CR3BP)
 
