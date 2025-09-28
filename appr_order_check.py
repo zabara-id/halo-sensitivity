@@ -114,7 +114,7 @@ if __name__ == "__main__":
     ord = 7
 
     # Файл для записи результатов
-    filepath="L1-192-results/7th_order.csv"
+    filepath="data/input/L1-192-results/7th_order.csv"
     
     # Гало-орбита из каталога
     haloorbit_type = 'L1'
