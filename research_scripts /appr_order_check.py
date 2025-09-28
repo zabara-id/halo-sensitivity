@@ -5,7 +5,6 @@ import numpy as np
 from daceypy import DA, array
 from scipy.integrate import solve_ivp
 
-
 from utils.libration_sense import (
     CR3BP,
     RK78,
@@ -26,7 +25,6 @@ def du_vu2km_kms(du_vu_vec: np.ndarray):
 
     return km_kms_vec
     
-
 
 def get_haloorbit_dots(
         haloorbit_type: str,
