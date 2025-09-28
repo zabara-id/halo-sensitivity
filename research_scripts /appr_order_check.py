@@ -19,7 +19,6 @@ from utils.libration_sense import (
 
 
 def du_vu2km_kms(du_vu_vec: np.ndarray):
-
     km = du2km(du_vu_vec[:3])
     kms = vu2kms(du_vu_vec[3:])
 
