@@ -48,12 +48,6 @@ typings/
 # pyenv
 .python-version
 
-# Django/Flask специфичное
-*.db
-*.sqlite3
-instance/
-.webassets-cache
-
 # dotenv
 .env
 *.env
