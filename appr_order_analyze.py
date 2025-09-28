@@ -30,10 +30,10 @@ for n in orders_all:
     err = np.sqrt((df["x_poly"]-df["x_int"])**2 +
                   (df["y_poly"]-df["y_int"])**2 +
                   (df["z_poly"]-df["z_int"])**2)
-    med = err.median()
+    med = err.max()
     orders.append(n)
     med_errs.append(med)
-    print(f"order {n}: median  = {med:.2e}")
+    print(f"order {n}: max  = {med:.2e}")
 
 if not med_errs:
     print("Нет данных для графика.")
@@ -49,9 +49,8 @@ else:
     plt.grid(which='minor', axis='y', linestyle=':', linewidth=0.4, alpha=0.4)
 
     # подписи
-    plt.xlabel("Approximation Order [-]", fontsize=12)
-    plt.ylabel("Median position error [km]", fontsize=12)
-    plt.title("Accuracy of polynomial approximation vs. order", fontsize=14, pad=12)
+    plt.xlabel("Порядок аппроксимации конченого состояния [-]", fontsize=12)
+    plt.ylabel("Максимальная ошибка по положению [км]", fontsize=12)
 
     # аннотации над столбцами
     for bar, val in zip(bars, med_errs):
