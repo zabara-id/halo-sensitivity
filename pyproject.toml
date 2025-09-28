@@ -15,4 +15,4 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["*"]
-exclude = ["*.ipynb", "tests*", "__pycache__"]
+exclude = ["tests*", "__pycache__"]
