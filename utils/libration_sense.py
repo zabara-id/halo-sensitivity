@@ -55,7 +55,7 @@ def initial_state_parser(orbit_type: str, number_of_orbit: int = 1) -> np.ndarra
         reader = csv.reader(csvfile)
         rows = list(reader)
         
-        selected_row = rows[number_of_orbit]
+        selected_row = rows[number_of_orbit - 1]
         
         selected_row = [float(num) for num in selected_row]
     
