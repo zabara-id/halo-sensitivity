@@ -17,7 +17,7 @@ from utils.libration_sense import halo_qualify, initial_state_parser, ORBIT_TYPE
 def qualify_orbittype_ic(orbit_type: str) -> None:
     rows_refined = []
     for i in tqdm(
-        np.arange(1, 3),
+        np.arange(1, ORBIT_TYPES_NUMS[orbit_type] + 1),
         desc=f"{orbit_type} processing:"
         ):
         x0, z0, vy0, period, jacobi, max_multiplier = initial_state_parser(orbit_type, i)
