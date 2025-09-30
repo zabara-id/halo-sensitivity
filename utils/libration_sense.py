@@ -549,8 +549,6 @@ def get_xf(orbit_type: str,
         initial_state[0] += x0  # x
         initial_state[2] += z0  # z
         initial_state[4] += vy0  # v_y
-        print('IS: ', type(initial_state))
-        print('T: ', type(T))
     else:
         x0, z0, vy0, T, _, __ = initial_state_parser(orbit_type, number_of_orbit)
         initial_state1 = np.array([x0, 0., z0, 0., vy0, 0.])
@@ -773,16 +771,19 @@ def halo_qualify(orbit_type: str, number_of_orbit: int):
     return np.array([x0_res, 0., z0, 0., vy0_res, 0.]), T_res
 
 
-def get_maxdeviation_wo_integrate(orbit_type: str,
-                                  number_of_orbit: int,
-                                  xf: DA,
-                                  std_pos: float,
-                                  std_vel: float,
-                                  derorder: int = 3,
-                                  number_of_halo_point: int | None = None,
-                                  amount_of_points: int = 10000) -> float:
+def get_maxdeviation_wo_integrate(
+    orbit_type: str,
+    number_of_orbit: int,
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+    derorder: int = 3,
+    number_of_halo_point: int | None = None,
+    amount_of_points: int = 10000,
+    unit_deltas: np.ndarray | None = None,
+    seed: int | None = None,
+) -> float:
     DA.init(derorder, 6)
-    # np.random.seed(42)
     if not number_of_halo_point:
         x0, z0, vy0, T, JACOBI, MAX_MUL = initial_state_parser(orbit_type, number_of_orbit)
         initial_state = array.identity(6)
@@ -817,7 +818,19 @@ def get_maxdeviation_wo_integrate(orbit_type: str,
     std_devs = np.array([std_dev_positions] * 3 + [std_dev_velocities] * 3)
 
     # Генерируем изменения (deltax0) для каждой компоненты
-    deltax0 = np.random.normal(0, std_devs, (amount_of_points, 6))
+    # Если переданы unit_deltas (единичные нормальные шумы), переиспользуем их для воспроизводимости
+    if unit_deltas is not None:
+        if unit_deltas.shape != (amount_of_points, 6):
+            raise ValueError(
+                f"unit_deltas must have shape ({amount_of_points}, 6), got {unit_deltas.shape}"
+            )
+        deltax0 = unit_deltas * std_devs  # масштабирование по std_pos/std_vel
+    else:
+        if seed is not None:
+            rng = np.random.default_rng(seed)
+            deltax0 = rng.normal(0.0, 1.0, (amount_of_points, 6)) * std_devs
+        else:
+            deltax0 = np.random.normal(0.0, 1.0, (amount_of_points, 6)) * std_devs
 
     # # Клиппинг
     # limits = np.array([3 * std_dev_positions] * 3 + [3 * std_dev_velocities] * 3)
