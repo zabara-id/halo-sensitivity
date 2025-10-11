@@ -16,10 +16,6 @@ from utils.libration_sense import (
 )
 
 
-class DmaxFormula:
-    pass
-
-
 def alpha_xfinder(n: float, orbit_type: str,
                  number_of_orbit: int,
                  xf: DA,
@@ -56,6 +52,7 @@ def alpha_xfinder(n: float, orbit_type: str,
     
     return alpha_star, deviation_max
 
+
 def alpha_finder_of_n(A_normed, y, n):
     rmin_max = np.max(y)
     y_normed = y / rmin_max
@@ -73,16 +70,7 @@ def n_finder(
     seed: int | None = None,
     reuse_noise: bool = True,
 ) -> float:
-    """оптимизация функционала J2 по n
-
-    Args:
-        orbit (np.ndarray): [a, e, i, omega, Omega]
-        xf (DA): конечная точка в TBP
-        m (int, optional): размер (плотность) сетки значений навигационных неточностей
-
-    Returns:
-        float: степень в формуле для rmin
-    """
+    
     std_pos_values = np.linspace(0, km2du(1), grid_density)  # от 0 до 1 км
     std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)  # от 0 до 0.01 м / с 
 
@@ -91,9 +79,11 @@ def n_finder(
     A = np.zeros((N, 2))
     y_du = np.zeros(N)
 
+    # pos_max = np.max(std_pos_values)
+    # vel_max = np.max(std_vel_values)
 
-    pos_max = np.max(std_pos_values)
-    vel_max = np.max(std_vel_values)
+    pos_max = std_pos_values[-1]
+    vel_max = std_vel_values[-1]
 
     # Подготовим переиспользуемый шум (единичные нормальные отклонения)
     rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
@@ -122,20 +112,30 @@ def n_finder(
     y_normed = y_du / np.max(y_du)
     A_normed_du_and_vu = A
 
-    def loss(n):
+    def loss(n: float) -> float:
+        """
+        Целевая функция для поиска степени n оптимизационной процедурой.
+
+        Args:
+            n (float): Степень нормы функционала для аппроксимирующей формулы.
+
+        Returns:
+            float: Значение среднеквадратичного отклонения в точке n.
+        """
         y_powered = np.power(y_normed, n)
         A_powered = np.power(A, n)
         alpha_star = np.linalg.inv(A_powered.T @ A_powered) @ A_powered.T @ y_powered
         core = np.power(y_powered - np.dot(A_powered, alpha_star), 2)
+
         return np.sum(core) / np.shape(y_powered)[0]
 
     # Ограничения на n
     bounds = [(0.000001, None)]
 
     # Начальное приближение
-    n_initial = 2.001
+    n_initial = 1.991
 
     # Метод сопряжённых направлений
-    n_opt = minimize(loss, n_initial, method='nelder-mead', bounds=bounds)
+    n_opt = minimize(loss, n_initial, method='Powell', bounds=bounds)
 
     return n_opt.x[0], A_normed_du_and_vu, y_du
