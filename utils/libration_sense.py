@@ -49,7 +49,7 @@ def initial_state_parser(orbit_type: str, number_of_orbit: int = 1) -> np.ndarra
     if (number_of_orbit < 1) or number_of_orbit > ORBIT_TYPES_NUMS[orbit_type]:
         raise ValueError(f"Incorrect orbit number. The range (1, {ORBIT_TYPES_NUMS[orbit_type]}) is available for {orbit_type}.")
     
-    file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'input', f'HOPhaseVectorsEarthMoon{orbit_type}.csv')
+    file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'input', 'qualified_ic_halo', f'HOPhaseVectorsEarthMoon{orbit_type}_qualified.csv')
     
     with open(file_path, newline='') as csvfile:
         reader = csv.reader(csvfile)

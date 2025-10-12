@@ -80,8 +80,8 @@ def deviation_graph(orbit_type: str,
     with DA.cache_manager():  # optional, for efficiency
         xfinal = RK78(initial_state, 0.0, number_of_turns * T, CR3BP)
 
-    std_pos_values = np.linspace(0, km2du(3), grid_density)  # от 0 до 8 км
-    std_vel_values = np.linspace(0, kmS2vu(0.03e-3), grid_density)  # от 0 до 0.05 м/с
+    std_pos_values = np.linspace(0, km2du(8), grid_density)  # от 0 до 1 км
+    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)  # от 0 до 0.01 м/с
 
     # Матрица для хранения результатов
     results = np.zeros((len(std_pos_values), len(std_vel_values)))
@@ -94,9 +94,12 @@ def deviation_graph(orbit_type: str,
         row += 1
         val = 0
         for j, std_vel in enumerate(std_vel_values):
-            results[i, j] = du2km(get_maxdeviation_wo_integrate(orbit_type, number_of_orbit, xfinal, std_pos, std_vel,
+            results[i, j] = du2km(get_maxdeviation_wo_integrate(orbit_type,
+                                                                number_of_orbit,
+                                                                xfinal,
+                                                                std_pos, std_vel,
                                                                 derorder=derorder,
-                                                                number_of_turns=number_of_turns,
+                                                                seed = 42,
                                                                 amount_of_points=number_of_points))
             print(f"Значение {val} в ряде {row} вычислено")
             val += 1
@@ -108,15 +111,62 @@ def deviation_graph(orbit_type: str,
     plt.figure(figsize=(10, 8))
 
     # Создание изолиний без заполнения
-    CS = plt.contour(vu2ms(std_vel_values), du2km(std_pos_values), results, levels=30, colors='k')
-    plt.clabel(CS, inline=True, fontsize=11)
+    # CS = plt.contour(vu2ms(std_vel_values), du2km(std_pos_values), results, levels=30, colors='k')
+    # plt.clabel(CS, inline=True, fontsize=11)
     
+    # plt.xlabel(r'$\sigma_{vel}$, $[m/s]$', fontsize=14)
+    # plt.ylabel(r'$\sigma_{pos}$, $[km]$', fontsize=14)
+    # plt.title(f"Deviation for orbit '{number_of_orbit}' around {orbit_type} with µ={np.around(MAX_MUL, 2 )}, [km]", fontsize=12)
+
+    # plt.tick_params(axis='both', which='major', labelsize=12)
+
+    # plt.show()
+
+    levels = np.linspace(np.nanmin(results), np.nanmax(results), 30)
+
+    # 2) Заливка
+    plt.contourf(
+        vu2ms(std_vel_values), 
+        du2km(std_pos_values), 
+        results, 
+        levels=levels, 
+        cmap="viridis",         # аккуратная колormap по умолчанию
+        antialiased=True
+    )
+
+    # 3) Линии поверх заливки
+    CS = plt.contour(
+        vu2ms(std_vel_values), 
+        du2km(std_pos_values), 
+        results, 
+        levels=levels, 
+        colors="k",
+        linewidths=0.7
+    )
+
+    # 4) Подписи именно на линиях (те же места, что и на изолиниях)
+    texts = plt.clabel(
+        CS, 
+        inline=True, 
+        inline_spacing=4, 
+        fontsize=11, 
+        fmt="%.2g"              # формат чисел при желании
+    )
+
+    # (необязательно) сделать подписи читаемыми на пёстрой заливке
+    for t in texts:
+        t.set_bbox(dict(facecolor="white", edgecolor="none", alpha=0.5, pad=0.1))
+
+    # 5) Оформление (как у тебя)
     plt.xlabel(r'$\sigma_{vel}$, $[m/s]$', fontsize=14)
     plt.ylabel(r'$\sigma_{pos}$, $[km]$', fontsize=14)
-    plt.title(f"Deviation for orbit '{number_of_orbit}' around {orbit_type} with µ={np.around(MAX_MUL, 2 )}, [km]", fontsize=12)
-
+    plt.title(
+        f"Deviation for orbit '{number_of_orbit}' around {orbit_type} with µ={np.around(MAX_MUL, 2)}, [km]",
+        fontsize=12
+    )
     plt.tick_params(axis='both', which='major', labelsize=12)
 
+    # ВАЖНО: без colorbar — просто не вызываем plt.colorbar()
     plt.show()
 
 
@@ -126,6 +176,8 @@ def main1():
 
 
 def main2():
-    # dots_graph('L1', 192, number_of_turns=3, derorder=1)
-    # print(deviation_finder('L1', 200, number_of_points=1000, number_of_turns=1))
-    deviation_graph('L1', 183, number_of_points=10000, number_of_turns=1, grid_density=45)
+    deviation_graph('L2', 72, number_of_points=5_000, number_of_turns=1, grid_density=20)
+
+
+if __name__ == "__main__":
+    main2()

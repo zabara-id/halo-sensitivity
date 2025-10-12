@@ -1,9 +1,12 @@
+from itertools import product
+
 import numpy as np
 from tqdm import tqdm
+from tqdm.auto import tqdm as atqdm
 from itertools import product
 from tqdm import tqdm
 from daceypy import DA
-from scipy.optimize import minimize
+from scipy.optimize import minimize, minimize_scalar
 
 from utils.libration_sense import (
     du2km,
@@ -71,8 +74,8 @@ def n_finder(
     reuse_noise: bool = True,
 ) -> float:
     
-    std_pos_values = np.linspace(0, km2du(1), grid_density)  # от 0 до 1 км
-    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)  # от 0 до 0.01 м / с 
+    std_pos_values = np.linspace(0, km2du(8), grid_density)  # от 0 до 8 км
+    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)  # от 0 до 0.05 м / с
 
     # Генерируем матрицу A и вектор y
     N = grid_density**2
@@ -139,3 +142,68 @@ def n_finder(
     n_opt = minimize(loss, n_initial, method='Powell', bounds=bounds)
 
     return n_opt.x[0], A_normed_du_and_vu, y_du
+
+
+def n_finder_performed(
+    orbit_type: str,
+    number_of_orbit: int,
+    xf,
+    grid_density: int = 5,
+    amount_of_points: int = 10_000,
+    seed: int | None = None,
+    reuse_noise: bool = True,
+    n_bounds=(0.5, 4.0),
+    ridge: float = 0.0,
+):
+    # сетка
+    std_pos_values = np.linspace(0, km2du(8), grid_density)
+    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)
+    POS, VEL = np.meshgrid(std_pos_values, std_vel_values, indexing="ij")
+    pos_max, vel_max = std_pos_values[-1], std_vel_values[-1]
+
+    # нормированные признаки (N x 2)
+    A = np.column_stack([(POS/pos_max).ravel(), (VEL/vel_max).ravel()])
+
+    # общий набор шумов
+    rng = np.random.default_rng(seed)
+    unit_deltas = rng.normal(0.0, 1.0, (amount_of_points, 6)) if reuse_noise else None
+
+    # вычисление цели для каждой точки сетки (узкое место → желательно распараллелить/кэшировать)
+    def one_val(sp, sv):
+        return get_maxdeviation_wo_integrate(
+            orbit_type, number_of_orbit, xf, sp, sv,
+            amount_of_points=amount_of_points,
+            unit_deltas=unit_deltas,
+            seed=None if reuse_noise else seed,
+        )
+
+    # векторизованный расчёт y (можно заменить на joblib.Parallel)
+    y_du = np.array([one_val(sp, sv) for sp, sv in zip(POS.ravel(), VEL.ravel())])
+
+    # нормируем на максимум
+    y_normed = y_du / np.max(y_du)
+    A_base = A.copy()
+
+    # небольшое eps для нулей (только в потере, чтобы n→0 не портил кондиционирование)
+    eps = 1e-12
+    A_pos = np.maximum(A_base, eps)
+    y_pos = np.maximum(y_normed, eps)
+
+    def loss(n: float) -> float:
+        y_p = y_pos**n
+        A_p = A_pos**n
+        if ridge > 0.0:
+            # (A^T A + λI)^{-1} A^T y  — через solve
+            AtA = A_p.T @ A_p
+            AtA.flat[0::AtA.shape[0]+1] += ridge  # добавим λ на диагональ
+            alpha = np.linalg.solve(AtA, A_p.T @ y_p)
+        else:
+            # устойчивее и обычно быстрее, чем explicit inv норм. уравнений
+            alpha, *_ = np.linalg.lstsq(A_p, y_p, rcond=None)
+        resid = y_p - A_p @ alpha
+        return float(np.mean(resid*resid))
+
+    res = minimize_scalar(loss, bounds=n_bounds, method="bounded", options={"xatol": 1e-3})
+    n_opt = float(res.x)
+
+    return n_opt, A_base, y_du
