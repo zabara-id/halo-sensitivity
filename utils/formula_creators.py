@@ -9,12 +9,8 @@ from daceypy import DA
 from scipy.optimize import minimize, minimize_scalar
 
 from utils.libration_sense import (
-    du2km,
     km2du,
-    get_xf,
-    vu2kms,
     kmS2vu,
-    initial_state_parser,
     get_maxdeviation_wo_integrate,
 )
 
@@ -24,8 +20,8 @@ def alpha_xfinder(n: float, orbit_type: str,
                  xf: DA,
                  grid_density: int = 5) -> tuple:
     # Создаем сетку значений
-    std_pos_values = np.linspace(0, km2du(1), grid_density)  # от 0 до 8 км
-    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)  # от 0 до 0.05 м / с 
+    std_pos_values = np.linspace(0, km2du(1), grid_density)             # от 0 до 8 км
+    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)      # от 0 до 0.05 м / с
 
     # Данные для нормировки
     pos_max = np.max(std_pos_values)
