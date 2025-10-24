@@ -8,17 +8,17 @@ from utils.libration_sense import (
     get_xf, du2km, initial_state_parser,
 )
 from utils.formula_creators import (
-    n_finder_performed, alpha_finder_of_n,
+   alpha_finder_of_n, n_finder
 )
 
 ORBIT_TYPE = "L2"
 ORBIT_MIN, ORBIT_MAX = 1, 583
-GRID_DENSITY = 20
-SEED = 42
+GRID_DENSITY = 11
+SEED = None
 REUSE_NOISE = True
-AMOUNT_OF_POINTS = 5_000
+AMOUNT_OF_POINTS = 10_000
 
-OUTPATH = "data/output/coefficients_wide/L2.csv"
+OUTPATH = "data/output/coefs_final/L2.csv"
 HEADER = ["Orbit Number", "T", "Alpha1", "Alpha2", "n", "Deviation Max"]
 
 
@@ -71,7 +71,7 @@ def compute_one(orbit_number: int):
         _, _, _, T, _, _ = initial_state_parser(ORBIT_TYPE, orbit_number)
         xf = get_xf(ORBIT_TYPE, orbit_number)
 
-        n_perf, A_normed, y_du = n_finder_performed(
+        n_perf, A_normed, y_du = n_finder(
             ORBIT_TYPE,
             orbit_number,
             xf,

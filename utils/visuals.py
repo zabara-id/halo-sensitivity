@@ -66,7 +66,8 @@ def deviation_graph(orbit_type: str,
                     derorder: int = 3,
                     number_of_turns: int = 1,
                     number_of_points: int = 10000,
-                    grid_density: int = 10) -> None:
+                    grid_density: int = 10,
+                    seed: int | None = 42) -> None:
 
     DA.init(derorder, 6)
     
@@ -80,15 +81,22 @@ def deviation_graph(orbit_type: str,
     with DA.cache_manager():  # optional, for efficiency
         xfinal = RK78(initial_state, 0.0, number_of_turns * T, CR3BP)
 
-    std_pos_values = np.linspace(0, km2du(8), grid_density)  # от 0 до 1 км
-    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)  # от 0 до 0.01 м/с
+    std_pos_values = np.linspace(0, km2du(1), grid_density)
+    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)
 
     # Матрица для хранения результатов
     results = np.zeros((len(std_pos_values), len(std_vel_values)))
 
+    # Используем один и тот же набор единичных шумов
+    # для всех точек сетки. Это устраняет «рваность» изолиний,
+    # которая возникала из‑за независимых экстремальных выборок
+    # в каждой точке (мы берём максимум по выборке).
+    rng = np.random.default_rng(seed)
+    unit_deltas = rng.normal(0.0, 1.0, (number_of_points, 6))
+
     P = len(std_pos_values)
     V = len(std_vel_values)
-    with tqdm(total=P*V, unit="eval") as pbar:
+    with tqdm(total=P*V) as pbar:
         for i, std_pos in enumerate(std_pos_values):
             for j, std_vel in enumerate(std_vel_values):
                 results[i, j] = du2km(
@@ -99,7 +107,9 @@ def deviation_graph(orbit_type: str,
                         std_pos,
                         std_vel,
                         derorder=derorder,
-                        amount_of_points=number_of_points
+                        amount_of_points=number_of_points,
+                        unit_deltas=unit_deltas,
+                        seed=None
                     )
                 )
                 pbar.update(1)
@@ -160,7 +170,7 @@ def main1():
 
 
 def main2():
-    deviation_graph('L1', 192, number_of_points=15_000, number_of_turns=1, grid_density=10)
+    deviation_graph('L1', 201, number_of_points=10_000, number_of_turns=1, grid_density=10)
 
 
 if __name__ == "__main__":

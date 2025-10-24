@@ -847,7 +847,7 @@ def get_maxdeviation_wo_integrate(
     # вычисление Евклидова расстояния от каждой точки в evaluated_results до x0_coords
     distances = np.sqrt(np.sum((evaluated_results - x0_coords) ** 2, axis=1))
 
-    return np.max(distances)
+    return np.quantile(distances, 0.99)
 
 
 def get_monodromy_matrix(orbit_type: str,

@@ -15,17 +15,35 @@ from utils.libration_sense import (
 )
 
 
-def alpha_xfinder(n: float, orbit_type: str,
-                 number_of_orbit: int,
-                 xf: DA,
-                 grid_density: int = 5) -> tuple:
+def alpha_xfinder(
+    n: float,
+    orbit_type: str,
+    number_of_orbit: int,
+    xf: DA,
+    grid_density: int = 5,
+    amount_of_points: int = 10_000,
+    seed: int | None = 42,
+    reuse_noise: bool = True,
+) -> tuple:
+    """Оценка коэффициентов alpha для фиксированного n.
+
+    Делает то же сглаживание, что и на графиках: один и тот же
+    набор единичных шумов используется во всех точках сетки,
+    чтобы убрать «рваность» из-за независимых выборок.
+    """
     # Создаем сетку значений
-    std_pos_values = np.linspace(0, km2du(1), grid_density)             # от 0 до 8 км
-    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)      # от 0 до 0.05 м / с
+    std_pos_values = np.linspace(0, km2du(1), grid_density)
+    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)
 
     # Данные для нормировки
-    pos_max = np.max(std_pos_values)
-    vel_max = np.max(std_vel_values)
+    pos_max = std_pos_values[-1]
+    vel_max = std_vel_values[-1]
+
+    # Общий набор шумов для всей сетки
+    rng = np.random.default_rng(seed)
+    unit_deltas = (
+        rng.normal(0.0, 1.0, (amount_of_points, 6)) if reuse_noise else None
+    )
 
     # Генерируем матрицу A и вектор y
     N = grid_density**2
@@ -38,17 +56,22 @@ def alpha_xfinder(n: float, orbit_type: str,
         for std_vel in std_vel_values:
             A[index] = [std_pos / pos_max, std_vel / vel_max]
             y[index] = get_maxdeviation_wo_integrate(
-                orbit_type, number_of_orbit, xf, std_pos, std_vel
+                orbit_type,
+                number_of_orbit,
+                xf,
+                std_pos,
+                std_vel,
+                amount_of_points=amount_of_points,
+                unit_deltas=unit_deltas,
+                seed=None if reuse_noise else seed,
             )
             index += 1
 
     deviation_max = np.max(y)
-    
     y_normed = y / deviation_max
     y_powered = np.power(y_normed, n)
     A_powered = np.power(A, n)
     alpha_star = np.linalg.inv(A_powered.T @ A_powered) @ A_powered.T @ y_powered
-    
     return alpha_star, deviation_max
 
 
@@ -70,8 +93,8 @@ def n_finder(
     reuse_noise: bool = True,
 ) -> float:
     
-    std_pos_values = np.linspace(0, km2du(8), grid_density)  # от 0 до 8 км
-    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)  # от 0 до 0.05 м / с
+    std_pos_values = np.linspace(0, km2du(1), grid_density)  # от 0 до 8 км
+    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)  # от 0 до 0.05 м / с
 
     # Генерируем матрицу A и вектор y
     N = grid_density**2
