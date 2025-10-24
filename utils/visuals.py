@@ -1,4 +1,4 @@
-import time
+from tqdm import tqdm
 
 from daceypy import DA, array
 import matplotlib.pyplot as plt
@@ -66,7 +66,7 @@ def deviation_graph(orbit_type: str,
                     derorder: int = 3,
                     number_of_turns: int = 1,
                     number_of_points: int = 10000,
-                    grid_density: int = 50) -> None:
+                    grid_density: int = 10) -> None:
 
     DA.init(derorder, 6)
     
@@ -86,41 +86,25 @@ def deviation_graph(orbit_type: str,
     # Матрица для хранения результатов
     results = np.zeros((len(std_pos_values), len(std_vel_values)))
 
-    row, val = 0, 0
-    # Вычисление значений для графика функции 2-х переменных
-    start = time.time()
-    for i, std_pos in enumerate(std_pos_values):
-        print(f"Ряд {row} просчитан")
-        row += 1
-        val = 0
-        for j, std_vel in enumerate(std_vel_values):
-            results[i, j] = du2km(get_maxdeviation_wo_integrate(orbit_type,
-                                                                number_of_orbit,
-                                                                xfinal,
-                                                                std_pos, std_vel,
-                                                                derorder=derorder,
-                                                                seed = 42,
-                                                                amount_of_points=number_of_points))
-            print(f"Значение {val} в ряде {row} вычислено")
-            val += 1
-    end = time.time()
-
-    print("Время расчёта: ", end - start)
-
+    P = len(std_pos_values)
+    V = len(std_vel_values)
+    with tqdm(total=P*V, unit="eval") as pbar:
+        for i, std_pos in enumerate(std_pos_values):
+            for j, std_vel in enumerate(std_vel_values):
+                results[i, j] = du2km(
+                    get_maxdeviation_wo_integrate(
+                        orbit_type,
+                        number_of_orbit,
+                        xfinal,
+                        std_pos,
+                        std_vel,
+                        derorder=derorder,
+                        amount_of_points=number_of_points
+                    )
+                )
+                pbar.update(1)
 
     plt.figure(figsize=(10, 8))
-
-    # Создание изолиний без заполнения
-    # CS = plt.contour(vu2ms(std_vel_values), du2km(std_pos_values), results, levels=30, colors='k')
-    # plt.clabel(CS, inline=True, fontsize=11)
-    
-    # plt.xlabel(r'$\sigma_{vel}$, $[m/s]$', fontsize=14)
-    # plt.ylabel(r'$\sigma_{pos}$, $[km]$', fontsize=14)
-    # plt.title(f"Deviation for orbit '{number_of_orbit}' around {orbit_type} with µ={np.around(MAX_MUL, 2 )}, [km]", fontsize=12)
-
-    # plt.tick_params(axis='both', which='major', labelsize=12)
-
-    # plt.show()
 
     levels = np.linspace(np.nanmin(results), np.nanmax(results), 30)
 
@@ -176,7 +160,7 @@ def main1():
 
 
 def main2():
-    deviation_graph('L2', 72, number_of_points=5_000, number_of_turns=1, grid_density=20)
+    deviation_graph('L1', 192, number_of_points=15_000, number_of_turns=1, grid_density=10)
 
 
 if __name__ == "__main__":

@@ -832,9 +832,9 @@ def get_maxdeviation_wo_integrate(
         else:
             deltax0 = np.random.normal(0.0, 1.0, (amount_of_points, 6)) * std_devs
 
-    # # Клиппинг
-    # limits = np.array([3 * std_dev_positions] * 3 + [3 * std_dev_velocities] * 3)
-    # deltax0 = np.clip(deltax0, -limits, limits)
+    # Клиппинг
+    limits = np.array([3 * std_dev_positions] * 3 + [3 * std_dev_velocities] * 3)
+    deltax0 = np.clip(deltax0, -limits, limits)
 
     x0_cons = initial_state.cons()  # координаты центральной точки (начальные условия)
     x0_coords = x0_cons[:3]  # только положения
