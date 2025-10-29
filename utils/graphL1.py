@@ -6,8 +6,9 @@ from scipy.interpolate import make_interp_spline
 from utils.libration_sense import du2km
 
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(current_dir, "koefficients_data_L1.csv")
+# file_path = "data/output/coefficients/koefficients_data_L1.csv"
+file_path = "data/output/coefs_final/L1_wide_range.csv"
+print(file_path)
 df = pd.read_csv(file_path)
 
 df.sort_values('z0', inplace=True)

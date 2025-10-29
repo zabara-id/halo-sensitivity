@@ -11,7 +11,8 @@ from scipy.optimize import minimize, minimize_scalar
 from utils.libration_sense import (
     km2du,
     kmS2vu,
-    get_maxdeviation_wo_integrate,
+    get_maxdev_sampling_no_integrate,
+    get_maxdev_optimization_ellipsoid
 )
 
 
@@ -55,7 +56,7 @@ def alpha_xfinder(
     for std_pos in tqdm(std_pos_values, desc="std_pos loop"):
         for std_vel in std_vel_values:
             A[index] = [std_pos / pos_max, std_vel / vel_max]
-            y[index] = get_maxdeviation_wo_integrate(
+            y[index] = get_maxdev_sampling_no_integrate(
                 orbit_type,
                 number_of_orbit,
                 xf,
@@ -93,8 +94,8 @@ def n_finder(
     reuse_noise: bool = True,
 ) -> float:
     
-    std_pos_values = np.linspace(0, km2du(1), grid_density)  # от 0 до 8 км
-    std_vel_values = np.linspace(0, kmS2vu(0.01e-3), grid_density)  # от 0 до 0.05 м / с
+    std_pos_values = np.linspace(0, km2du(8), grid_density)  # от 0 до 8 км
+    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)  # от 0 до 0.05 м / с
 
     # Генерируем матрицу A и вектор y
     N = grid_density**2
@@ -113,21 +114,25 @@ def n_finder(
 
     # Заполняем A и y
     index = 0
-    for std_pos, std_vel in tqdm(
-        product(std_pos_values, std_vel_values),
-        total=len(std_pos_values) * len(std_vel_values),
-        desc="progress"
-    ):
+    for std_pos, std_vel in product(std_pos_values, std_vel_values):
         A[index] = [std_pos / pos_max, std_vel / vel_max]
-        y_du[index] = get_maxdeviation_wo_integrate(
+        # y_du[index] = get_maxdev_sampling_no_integrate(
+        #     orbit_type,
+        #     number_of_orbit,
+        #     xf,
+        #     std_pos,
+        #     std_vel,
+        #     amount_of_points=amount_of_points,
+        #     unit_deltas=unit_deltas,
+        #     seed=None if reuse_noise else seed,
+        # )
+        y_du[index] = get_maxdev_optimization_ellipsoid(
             orbit_type,
             number_of_orbit,
             xf,
             std_pos,
             std_vel,
-            amount_of_points=amount_of_points,
-            unit_deltas=unit_deltas,
-            seed=None if reuse_noise else seed,
+            radius=4.0
         )
         index += 1
 
@@ -189,7 +194,7 @@ def n_finder_performed(
 
     # вычисление цели для каждой точки сетки (узкое место → желательно распараллелить/кэшировать)
     def one_val(sp, sv):
-        return get_maxdeviation_wo_integrate(
+        return get_maxdev_sampling_no_integrate(
             orbit_type, number_of_orbit, xf, sp, sv,
             amount_of_points=amount_of_points,
             unit_deltas=unit_deltas,

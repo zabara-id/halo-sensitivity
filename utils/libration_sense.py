@@ -2,6 +2,7 @@ import os
 import csv
 
 import numpy as np
+from itertools import product
 from daceypy import DA, array
 from typing import Callable
 from scipy.optimize import minimize
@@ -771,7 +772,7 @@ def halo_qualify(orbit_type: str, number_of_orbit: int):
     return np.array([x0_res, 0., z0, 0., vy0_res, 0.]), T_res
 
 
-def get_maxdeviation_wo_integrate(
+def get_maxdev_sampling_no_integrate(
     orbit_type: str,
     number_of_orbit: int,
     xf: DA,
@@ -847,7 +848,7 @@ def get_maxdeviation_wo_integrate(
     # вычисление Евклидова расстояния от каждой точки в evaluated_results до x0_coords
     distances = np.sqrt(np.sum((evaluated_results - x0_coords) ** 2, axis=1))
 
-    return np.quantile(distances, 0.99)
+    return np.quantile(distances, 0.999)
 
 
 def get_monodromy_matrix(orbit_type: str,
@@ -869,16 +870,315 @@ def get_monodromy_matrix(orbit_type: str,
     return monodromy_matrix
 
 
-# Примеры
-def main1():
-    num = 192
-    std_pos = km2du(8)  # от 0 до 8 км
-    std_vel = kmS2vu(0.05e-3)  # от 0 до 0.05 м/с
-    print(f"Max deviation orbit {num}: ", du2km(get_maxdeviation("L1", num, std_pos, std_vel, number_of_points=100_000)))
+def get_maxdev_optimization_no_integrate(
+        orbit_type: str,
+        number_of_orbit: int,
+        xf: DA,
+        std_pos: float,
+        std_vel: float,
+        verbose: bool = False,
+):
+    """
+    Максимизирует норму отклонения в координатном пространстве через период,
+    используя полиномиальную (DA) аппроксимацию потока без повторной интеграции.
 
-def main2():
-    M = get_monodromy_matrix('L1', 192)
+    Замечание: xf — это результат get_xf(...), который уже содержит члены
+    старших порядков (A1 x + A2 xx + A3 xxx + ...). Здесь мы напрямую
+    используем оценку F(x) через xf.eval(x), что эквивалентно подстановке
+    соответствующих подтензоров только для координатной (3-мерной) части.
+
+    Для ускорения/стабильности мы используем multi-start по ограниченному
+    боксу и метод L-BFGS-B (минимизируем -||F(x)||^2).
+
+    Возвращает максимальную норму отклонения (float) в тех же безразмерных единицах.
+    """
+
+    # 1) Центральная точка (для вычитания в координатном пространстве)
+    x0, z0, vy0, T, _, _ = initial_state_parser(orbit_type, number_of_orbit)
+    initial_state = array.identity(6)
+    initial_state[0] += x0
+    initial_state[2] += z0
+    initial_state[4] += vy0
+    x0_coords = initial_state.cons()[:3]
+
+    # 2) Границы на x (позиции и скорости отдельно)
+    pos_lim = 3.0 * std_pos
+    vel_lim = 3.0 * std_vel
+    lower = np.array([-pos_lim, -pos_lim, -pos_lim, -vel_lim, -vel_lim, -vel_lim])
+    upper = -lower
+
+    bounds = [(lower[i], upper[i]) for i in range(6)]
+
+    # 3) Целевая функция: минимизируем отрицательный квадрат нормы (эквив. максимизируем норму)
+    def objective(x: np.ndarray) -> float:
+        Fx = xf.eval(x)[:3] - x0_coords
+        return -float(np.dot(Fx, Fx))
+
+    # 4) Инициализации: несколько разумных стартов + экстремальные точки бокса
+    inits: list[np.ndarray] = []
+    inits.append(np.zeros(6))
+
+    # Оси по отдельности (в плюс/минус)
+    axes = [np.array([1, 0, 0, 0, 0, 0]),
+            np.array([0, 1, 0, 0, 0, 0]),
+            np.array([0, 0, 1, 0, 0, 0]),
+            np.array([0, 0, 0, 1, 0, 0]),
+            np.array([0, 0, 0, 0, 1, 0]),
+            np.array([0, 0, 0, 0, 0, 1])]
+    scales = np.array([pos_lim, pos_lim, pos_lim, vel_lim, vel_lim, vel_lim])
+    for i in range(6):
+        vec = np.zeros(6)
+        vec[i] = scales[i]
+        inits.append(vec)
+        inits.append(-vec)
+
+    # Грубая линейная эвристика для выбора «угла» бокса
+    try:
+        A_lin = np.array(xf.linear())[:3, :]  # позиционная подматрица монодромии
+        Q = A_lin.T @ A_lin                   # матрица квадратичной формы
+        # Собственный вектор для max направления
+        w, V = np.linalg.eigh(Q)
+        vmax = V[:, np.argmax(w)]
+        corner = np.sign(vmax) * scales
+        inits.append(corner)
+        inits.append(-corner)
+    except Exception:
+        # На случай, если .linear() недоступен
+        pass
+
+    # Пара случайных стартов внутри бокса
+    rng = np.random.default_rng(12345)
+    for _ in range(8):
+        r = rng.uniform(-1.0, 1.0, size=6)
+        inits.append(r * scales)
+
+    best_val = -np.inf
+    best_x: np.ndarray | None = None
+    # Итоговая норма (а не квадрат нормы)
+    best_norm = 0.0
+
+    for x0_init in inits:
+        res = minimize(
+            objective,
+            x0_init,
+            method="L-BFGS-B",
+            bounds=bounds,
+            options={"maxiter": 500, "ftol": 1e-12},
+        )
+        # objective возвращает отрицательный квадрат нормы
+        val = -res.fun  # квадрат нормы
+        if val > best_val:
+            best_val = float(val)
+            best_x = np.array(res.x, dtype=float)
+
+    best_norm = np.sqrt(max(best_val, 0.0))
+
+    if verbose and best_x is not None:
+        # Диагностика решения: печать в удобных единицах и проверка ограничений
+        limits = np.array([pos_lim] * 3 + [vel_lim] * 3)
+        ratios = np.abs(best_x) / (limits + 1e-30)
+        pos_km = du2km(best_x[:3])
+        vel_ms = vu2ms(best_x[3:])
+        Fx = xf.eval(best_x)[:3] - x0_coords
+        print("[opt] argmax x (pos DU, vel VU):", np.array2string(best_x, precision=6))
+        print("[opt] argmax x (pos km, vel m/s):",
+              np.array2string(np.concatenate([pos_km, vel_ms]), precision=6))
+        print("[opt] |x|/limits per-comp:", np.array2string(ratios, precision=3))
+        print("[opt] within bounds (<=1+tol)?",
+              bool(np.all(np.abs(best_x) <= limits + 1e-10)))
+        print("[opt] F(x) (DU):", np.array2string(Fx, precision=6),
+              "||F||=", float(np.linalg.norm(Fx)))
+    return best_norm
+
+
+def get_maxdev_linear_corner_max(
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+) -> float:
+    """
+    Линейная оценка максимума: max_x ||A_pos x|| на боксе
+    |x[:3]| ≤ 3*std_pos, |x[3:6]| ≤ 3*std_vel.
+
+    A_pos — верхний (3x6) блок линейной части DA-карты xf.
+    Максимум выпуклой нормы на гиперпрямоугольнике достигается в одной из 2^6 вершин.
+    Перебираем все 64 угла бокса.
+    Возвращает максимум нормы в DU.
+    """
+    A_pos = np.array(xf.linear())[:3, :]
+    pos_lim = 3.0 * std_pos
+    vel_lim = 3.0 * std_vel
+    scales = np.array([pos_lim] * 3 + [vel_lim] * 3)
+
+    best = 0.0
+    for signs in product((-1.0, 1.0), repeat=6):
+        x = scales * np.array(signs)
+        y = A_pos @ x
+        val = float(np.linalg.norm(y))
+        if val > best:
+            best = val
+    return best
+
+
+def get_maxdev_optimization_ellipsoid(
+    orbit_type: str,
+    number_of_orbit: int,
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+    radius: float = 3.0,
+    verbose: bool = False,
+    n_random_starts: int = 6,
+) -> float:
+    """
+    Максимизация ||F(x)|| при эллипсоидальном ограничении на начальное возмущение x.
+
+    Формулировка:
+      maximize  || F(x) ||,    F(x) = xf.eval(x)[:3] - x0_coords
+      subject to  (x_1/σ_pos)^2 + (x_2/σ_pos)^2 + (x_3/σ_pos)^2
+                + (x_4/σ_vel)^2 + (x_5/σ_vel)^2 + (x_6/σ_vel)^2  ≤  radius^2
+
+    Реализация через переобозначение x = D u, где
+      D = diag([σ_pos, σ_pos, σ_pos, σ_vel, σ_vel, σ_vel]),  ||u||_2 ≤ radius
+
+    Оптимизируем по u с SLSQP и ограничением 9 - ||u||^2 ≥ 0. Запускаем мультимодальные старты.
+
+    Возвращает максимальную норму отклонения (float) в DU.
+    """
+    # Центральная точка для вычитания (позиции)
+    x0, z0, vy0, T, _, _ = initial_state_parser(orbit_type, number_of_orbit)
+    initial_state = array.identity(6)
+    initial_state[0] += x0
+    initial_state[2] += z0
+    initial_state[4] += vy0
+    x0_coords = initial_state.cons()[:3]
+
+    # Диагональ масштаба (DU и VU)
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+
+    # Маска ненулевых компонент для устойчивого констрейнта, когда σ=0
+    mask = d > 0
+    r2 = float(radius * radius)
+
+    def constraint_fun(u: np.ndarray) -> float:
+        uu = u[mask]
+        return r2 - float(np.dot(uu, uu))
+
+    cons = ({'type': 'ineq', 'fun': constraint_fun},)
+
+    def objective_u(u: np.ndarray) -> float:
+        x = d * u
+        Fx = xf.eval(x)[:3] - x0_coords
+        return -float(np.dot(Fx, Fx))
+
+    # Стартовые точки: ноль, оси, пара случайных внутри шара
+    inits: list[np.ndarray] = [np.zeros(6)]
+    for i in range(6):
+        e = np.zeros(6)
+        e[i] = radius
+        inits.append(e)
+        inits.append(-e)
+
+    rng = np.random.default_rng(2025)
+    for _ in range(n_random_starts):
+        u = rng.normal(0.0, 1.0, 6)
+        nu = np.linalg.norm(u)
+        if nu > 1e-12:
+            u = (radius * u) / nu  # на сферу
+        else:
+            u = np.zeros(6)
+        inits.append(u)
+
+    best_val = -np.inf
+    best_u: np.ndarray | None = None
+
+    for u0 in inits:
+        res = minimize(
+            objective_u,
+            u0,
+            method='SLSQP',
+            constraints=cons,
+            options={'ftol': 1e-12, 'maxiter': 500, 'disp': False},
+        )
+        val = -res.fun
+        if val > best_val:
+            best_val = float(val)
+            best_u = np.array(res.x, dtype=float)
+
+    best_norm = np.sqrt(max(best_val, 0.0))
+
+    if verbose and best_u is not None:
+        x_best = d * best_u
+        Fx = xf.eval(x_best)[:3] - x0_coords
+        # относительное положение на сфере
+        u_norm = float(np.linalg.norm(best_u[mask]))
+        print('[opt-ell] ||u||/radius =', u_norm / radius if radius > 0 else np.nan)
+        print('[opt-ell] u:', np.array2string(best_u, precision=6))
+        print('[opt-ell] x (DU/VU):', np.array2string(x_best, precision=6))
+        print('[opt-ell] x (km, m/s):',
+              np.array2string(np.concatenate([du2km(x_best[:3]), vu2ms(x_best[3:])]), precision=6))
+        print('[opt-ell] F(x) (DU):', np.array2string(Fx, precision=6), '||F||=', float(np.linalg.norm(Fx)))
+
+    return best_norm
+
+
+def main():
+
+    orbit_type, orbit_num = "L1", 92
+    std_pos, std_vel = km2du(2.4), kmS2vu(0.01e-3)
+
+    derorder = 3
+
+    # получаем DA-объект через виток гало-орбиты
+    xf = get_xf(orbit_type, orbit_num, derorder=derorder)
+
+    # получаем отклонение через виток, используя технику семплирования
+    dev_sampling = get_maxdev_sampling_no_integrate(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        derorder=derorder,
+        amount_of_points=10_000
+    )
+
+    dev_optimization = get_maxdev_optimization_no_integrate(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        verbose=False,
+    )
+    
+    # Линейный максимум по 64 углам бокса
+    dev_linear_corner = get_maxdev_linear_corner_max(
+        xf,
+        std_pos,
+        std_vel,
+    )
+    
+    # Эллипсоидальная оптимизация (||D^{-1} x||_2 ≤ 3)
+    dev_ellipsoid = get_maxdev_optimization_ellipsoid(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=3.0,
+        verbose=True,
+    )
+
+    # Сравнение (DU и км). Семплинг возвращает 0.99-квантиль, оптимизация — максимум
+    print("Comparison (one-turn deviation):")
+    print(f"  orbit={orbit_type} #{orbit_num}, derorder={derorder}")
+    print(f"  sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
+    print(f"  sampling: {dev_sampling:.6e} DU  |  {du2km(dev_sampling):.6f} km")
+    # print(f"  optimization max: {dev_optimization:.6e} DU  |  {du2km(dev_optimization):.6f} km")
+    # print(f"  linear corner max: {dev_linear_corner:.6e} DU  |  {du2km(dev_linear_corner):.6f} km")
+    print(f"  ellipsoid max: {dev_ellipsoid:.6e} DU  |  {du2km(dev_ellipsoid):.6f} km")
 
 
 if __name__ == "__main__":
-    main1()
+    main()

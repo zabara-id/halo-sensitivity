@@ -11,15 +11,15 @@ from utils.formula_creators import (
    alpha_finder_of_n, n_finder
 )
 
-ORBIT_TYPE = "L2"
-ORBIT_MIN, ORBIT_MAX = 1, 583
+ORBIT_TYPE = "L1"
+ORBIT_MIN, ORBIT_MAX = 1, 251
 GRID_DENSITY = 11
 SEED = None
 REUSE_NOISE = True
-AMOUNT_OF_POINTS = 10_000
+AMOUNT_OF_POINTS = 11_000
 
-OUTPATH = "data/output/coefs_final/L2.csv"
-HEADER = ["Orbit Number", "T", "Alpha1", "Alpha2", "n", "Deviation Max"]
+OUTPATH = "data/output/coefs_final/L1_wide_range.csv"
+HEADER = ["Orbit Number", "z0", "Alpha1", "Alpha2", "n", "Deviation Max"]
 
 
 def sort_csv_inplace(path: str, header: list[str]):
@@ -68,7 +68,7 @@ def compute_one(orbit_number: int):
     (orbit_number, T, alpha1, alpha2, n_perf, deviation_max_km)
     """
     try:
-        _, _, _, T, _, _ = initial_state_parser(ORBIT_TYPE, orbit_number)
+        _, z0, _, T, _, _ = initial_state_parser(ORBIT_TYPE, orbit_number)
         xf = get_xf(ORBIT_TYPE, orbit_number)
 
         n_perf, A_normed, y_du = n_finder(
@@ -86,7 +86,7 @@ def compute_one(orbit_number: int):
         alpha1 = float(alpha[0])
         alpha2 = float(alpha[1])
 
-        return (orbit_number, float(T), alpha1, alpha2, float(n_perf), float(deviation_max_km), None)
+        return (orbit_number, float(z0), alpha1, alpha2, float(n_perf), float(deviation_max_km), None)
     except Exception as e:
         # вернём ошибку, чтобы главный процесс мог залогировать и идти дальше
         return (orbit_number, None, None, None, None, None, str(e))
@@ -144,9 +144,9 @@ def main():
             done = 0
             # chunksize подберите эмпирически (1–4). При «тяжёлых» тасках разницы почти нет.
             for res in pool.imap_unordered(compute_one, todo, chunksize=1):
-                orbit_n, T, a1, a2, nperf, dmax_km, err = res
+                orbit_n, z0, a1, a2, nperf, dmax_km, err = res
                 if err is None:
-                    writer.writerow([orbit_n, T, a1, a2, nperf, dmax_km])
+                    writer.writerow([orbit_n, z0, a1, a2, nperf, dmax_km])
                     f.flush()
                 else:
                     print(f"[ERROR] orbit {orbit_n}: {err}", file=sys.stderr)

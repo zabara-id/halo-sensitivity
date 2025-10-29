@@ -1,4 +1,4 @@
-from libration_sense import get_xf, km2du, kmS2vu, du2km, get_maxdeviation_wo_integrate
+from libration_sense import get_xf, km2du, kmS2vu, du2km, get_maxdev_sampling_no_integrate
 from formula_creators import n_finder, alpha_finder_of_n
 
 
