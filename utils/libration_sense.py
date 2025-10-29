@@ -1122,6 +1122,31 @@ def get_maxdev_optimization_ellipsoid(
     return best_norm
 
 
+def get_maxdev_linear_ellipsoid(
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+    radius: float,
+) -> float:
+    """
+    Линейная (аналитическая) оценка максимума на эллипсоиде неопределенности.
+
+    Формула: d_max_lin = r * sigma_max(A_pos @ D),
+      где A_pos — верхний 3x6 блок линейной части (монодромии),
+          D = diag([σ_pos]*3 + [σ_vel]*3), r — радиус в whitened‑пространстве.
+
+    Радиус r задаётся явно пользователем. Возвращает максимум ||A_pos x|| в DU.
+    """
+    A_pos = np.array(xf.linear())[:3, :]
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+    r = float(radius)
+
+    M = A_pos @ np.diag(d)
+    svals = np.linalg.svd(M, compute_uv=False, full_matrices=False)
+    smax = float(svals[0]) if svals.size > 0 else 0.0
+    return r * smax
+
+
 def main():
 
     orbit_type, orbit_num = "L1", 92
@@ -1159,15 +1184,23 @@ def main():
         std_vel,
     )
     
-    # Эллипсоидальная оптимизация (||D^{-1} x||_2 ≤ 3)
+    # Эллипсоидальная оптимизация (радиус задаётся явно)
     dev_ellipsoid = get_maxdev_optimization_ellipsoid(
         orbit_type,
         orbit_num,
         xf,
         std_pos,
         std_vel,
-        radius=3.0,
-        verbose=True,
+        radius=4.0,
+        verbose=False,
+    )
+
+    # Линейная эллипсоидальная оценка (аналитика)
+    dev_linear_ellipsoid = get_maxdev_linear_ellipsoid(
+        xf,
+        std_pos,
+        std_vel,
+        radius=4.0,
     )
 
     # Сравнение (DU и км). Семплинг возвращает 0.99-квантиль, оптимизация — максимум
@@ -1178,6 +1211,7 @@ def main():
     # print(f"  optimization max: {dev_optimization:.6e} DU  |  {du2km(dev_optimization):.6f} km")
     # print(f"  linear corner max: {dev_linear_corner:.6e} DU  |  {du2km(dev_linear_corner):.6f} km")
     print(f"  ellipsoid max: {dev_ellipsoid:.6e} DU  |  {du2km(dev_ellipsoid):.6f} km")
+    print(f"  linear ellipsoid: {dev_linear_ellipsoid:.6e} DU  |  {du2km(dev_linear_ellipsoid):.6f} km")
 
 
 if __name__ == "__main__":

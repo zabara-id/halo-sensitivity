@@ -125,7 +125,8 @@ def deviation_graph(orbit_type: str,
                         number_of_orbit,
                         xfinal,
                         std_pos,
-                        std_vel
+                        std_vel,
+                        radius=4.0,
                     )
                 )
                 pbar.update(1)
