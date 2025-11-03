@@ -7,6 +7,8 @@ from daceypy import DA, array
 from typing import Callable
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (ensures 3D projection is registered)
 
 
 ORBIT_TYPES_NUMS = {'L1' : 251,
@@ -941,9 +943,86 @@ def get_maxdev_sampling_ellipsoid(
     # Оценка через DA-карту (xf)
     evaluated_results = np.array([xf.eval(delta)[:3] for delta in deltax0_proj])
 
-    # Нормы отклонений и возврат 0.999-квантиля
+    # Нормы отклонений и возврат максимума
     distances = np.sqrt(np.sum((evaluated_results - x0_coords) ** 2, axis=1))
-    return np.quantile(distances, 1)
+    return np.max(distances)
+
+
+def get_maxdev_sampling_ellipsoid_with_vector(
+    orbit_type: str,
+    number_of_orbit: int,
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+    derorder: int = 3,
+    number_of_halo_point: int | None = None,
+    amount_of_points: int = 10000,
+    unit_deltas: np.ndarray | None = None,
+    seed: int | None = None,
+    radius: float = 3.0,
+) -> tuple[float, np.ndarray]:
+    """
+    Как get_maxdev_sampling_ellipsoid, но помимо максимального значения возвращает
+    и 6D-вектор начального отклонения x (в DU/VU), который дал этот максимум.
+    Для визуализации обычно берём позиции x[:3].
+    """
+    DA.init(derorder, 6)
+
+    # Базовое состояние
+    if not number_of_halo_point:
+        x0, z0, vy0, T, JACOBI, MAX_MUL = initial_state_parser(orbit_type, number_of_orbit)
+        initial_state = array.identity(6)
+        initial_state[0] += x0
+        initial_state[2] += z0
+        initial_state[4] += vy0
+    else:
+        x0, z0, vy0, T, _, __ = initial_state_parser(orbit_type, number_of_orbit)
+        initial_state_np, T = halo_qualify(orbit_type, number_of_orbit)
+
+        t_span = (0, T)
+        t_eval = np.linspace(t_span[0], t_span[1], 1000)
+        sol = solve_ivp(cr3bp, t_span, initial_state_np, t_eval=t_eval, rtol=1e-13, atol=1e-13, method='LSODA')
+        halo_orbit_dots = sol.y.T
+        halo_orbit_dot = halo_orbit_dots[number_of_halo_point]
+
+        initial_state = array.identity(6)
+        initial_state[0] += halo_orbit_dot[0]
+        initial_state[1] += halo_orbit_dot[1]
+        initial_state[2] += halo_orbit_dot[2]
+        initial_state[3] += halo_orbit_dot[3]
+        initial_state[4] += halo_orbit_dot[4]
+        initial_state[5] += halo_orbit_dot[5]
+
+    # Диагонали std
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+
+    # Семплы
+    if unit_deltas is not None:
+        if unit_deltas.shape != (amount_of_points, 6):
+            raise ValueError(
+                f"unit_deltas must have shape ({amount_of_points}, 6), got {unit_deltas.shape}"
+            )
+        deltax0 = unit_deltas * d
+    else:
+        rng = np.random.default_rng(seed)
+        deltax0 = rng.normal(0.0, 1.0, (amount_of_points, 6)) * d
+
+    # Проекция на эллипсоид (whitened радиальная)
+    u = deltax0 / d
+    norms = np.linalg.norm(u, axis=1)
+    mask = norms > radius
+    scales = np.ones_like(norms)
+    scales[mask] = radius / norms[mask]
+    u_proj = u * scales[:, None]
+    deltax0_proj = d * u_proj
+
+    x0_cons = initial_state.cons()
+    x0_coords = x0_cons[:3]
+    evaluated_results = np.array([xf.eval(delta)[:3] for delta in deltax0_proj])
+    distances = np.sqrt(np.sum((evaluated_results - x0_coords) ** 2, axis=1))
+
+    idx = int(np.argmax(distances))
+    return float(distances[idx]), deltax0_proj[idx]
 
 
 def get_monodromy_matrix(orbit_type: str,
@@ -1016,6 +1095,39 @@ def get_maxdev_floquet_ellipsoid(
     # 3) «Проход через период» по Флоке: масштабирование на MAX_MUL
     delta_final = lam * v_proj
     return float(np.linalg.norm(delta_final[:3]))
+
+
+def get_maxdev_floquet_ellipsoid_with_vector(
+    orbit_type: str,
+    number_of_orbit: int,
+    std_pos: float,
+    std_vel: float,
+    radius: float = 3.0,
+) -> tuple[float, np.ndarray]:
+    """
+    Как get_maxdev_floquet_ellipsoid, но возвращает также 6D-вектор v_proj (DU/VU)
+    — начальное возмущение на границе эллипсоида, дающее максимум в модели Флоке.
+    Возвращаемое значение — ||lambda * v_proj|| по позиционной части.
+    """
+    x0, z0, vy0, T, JACOBI, MAX_MUL = initial_state_parser(orbit_type, number_of_orbit)
+    M = get_monodromy_matrix(orbit_type, number_of_orbit)
+
+    eigvals, eigvecs = np.linalg.eig(M)
+    idx = int(np.argmin(np.abs(np.abs(eigvals) - float(MAX_MUL))))
+    v = eigvecs[:, idx]
+    lam = float(eigvals[idx])
+    if np.iscomplexobj(v):
+        v = np.real(v)
+
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+    denom = float(np.linalg.norm(v / d))
+    if denom == 0.0 or not np.isfinite(denom):
+        return 0.0, np.zeros(6)
+    v_proj = (float(radius) / denom) * v
+
+    delta_final = lam * v_proj
+    val = float(np.linalg.norm(delta_final[:3]))
+    return val, v_proj
 
 
 def get_maxdev_optimization_no_integrate(
@@ -1299,6 +1411,91 @@ def get_maxdev_optimization_ellipsoid(
     return best_norm
 
 
+def get_maxdev_optimization_ellipsoid_with_vector(
+    orbit_type: str,
+    number_of_orbit: int,
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+    radius: float = 3.0,
+    verbose: bool = False,
+    n_random_starts: int = 6,
+    init_strategy: str = 'multi',  # 'multi' | 'linear'
+) -> tuple[float, np.ndarray]:
+    """
+    Вариант get_maxdev_optimization_ellipsoid, возвращающий и максимальное значение,
+    и 6D-вектор начального отклонения x, который его достигает (для визуализации).
+    """
+    x0, z0, vy0, T, _, _ = initial_state_parser(orbit_type, number_of_orbit)
+    initial_state = array.identity(6)
+    initial_state[0] += x0
+    initial_state[2] += z0
+    initial_state[4] += vy0
+    x0_coords = initial_state.cons()[:3]
+
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+    mask = d > 0
+    r2 = float(radius * radius)
+
+    def constraint_fun(u: np.ndarray) -> float:
+        uu = u[mask]
+        return r2 - float(np.dot(uu, uu))
+
+    cons = ({'type': 'ineq', 'fun': constraint_fun},)
+
+    def objective_u(u: np.ndarray) -> float:
+        x = d * u
+        Fx = xf.eval(x)[:3] - x0_coords
+        return -float(np.dot(Fx, Fx))
+
+    inits: list[np.ndarray] = []
+    if init_strategy == 'linear':
+        v_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+        inits = [float(radius) * v_hat]
+    else:
+        inits.append(np.zeros(6))
+        for i in range(6):
+            e = np.zeros(6)
+            e[i] = radius
+            inits.append(e)
+            inits.append(-e)
+        rng = np.random.default_rng(2025)
+        for _ in range(n_random_starts):
+            u = rng.normal(0.0, 1.0, 6)
+            nu = np.linalg.norm(u)
+            u = (radius * u / nu) if nu > 1e-12 else np.zeros(6)
+            inits.append(u)
+
+    best_val = -np.inf
+    best_u: np.ndarray | None = None
+
+    for u0 in inits:
+        res = minimize(
+            objective_u,
+            u0,
+            method='SLSQP',
+            constraints=cons,
+            options={'ftol': 1e-12, 'maxiter': 500, 'disp': False},
+        )
+        val = -res.fun
+        if val > best_val:
+            best_val = float(val)
+            best_u = np.array(res.x, dtype=float)
+
+    best_norm = np.sqrt(max(best_val, 0.0))
+    x_best = d * (best_u if best_u is not None else np.zeros(6))
+
+    if verbose and best_u is not None:
+        Fx = xf.eval(x_best)[:3] - x0_coords
+        u_norm = float(np.linalg.norm(best_u[mask]))
+        print('[opt-ell/vec] ||u||/radius =', u_norm / radius if radius > 0 else np.nan)
+        print('[opt-ell/vec] u:', np.array2string(best_u, precision=6))
+        print('[opt-ell/vec] x (DU/VU):', np.array2string(x_best, precision=6))
+        print('[opt-ell/vec] F(x) (DU):', np.array2string(Fx, precision=6), '||F||=', float(np.linalg.norm(Fx)))
+
+    return best_norm, x_best
+
+
 def get_maxdev_optimization_ellipsoid_integrate(
     orbit_type: str,
     number_of_orbit: int,
@@ -1452,6 +1649,89 @@ def get_maxdev_optimization_ellipsoid_integrate(
 
     return best_norm
 
+
+def get_maxdev_optimization_ellipsoid_integrate_with_vector(
+    orbit_type: str,
+    number_of_orbit: int,
+    xf: DA,  # kept for API similarity
+    std_pos: float,
+    std_vel: float,
+    radius: float = 3.0,
+    verbose: bool = False,
+    n_random_starts: int = 6,
+    init_strategy: str = 'multi',
+) -> tuple[float, np.ndarray]:
+    """
+    Как get_maxdev_optimization_ellipsoid_integrate, но возвращает и 6D-вектор x,
+    который дал максимум (начальное возмущение в DU/VU).
+    """
+    initial_state_np, T = halo_qualify(orbit_type, number_of_orbit)
+    x0_coords = initial_state_np[:3].copy()
+
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+
+    def objective_u(u: np.ndarray) -> float:
+        x = d * u
+        y0 = initial_state_np + x
+        t_span = (0.0, float(T))
+        t_eval = np.linspace(t_span[0], t_span[1], 1000)
+        sol = solve_ivp(cr3bp, t_span, y0, t_eval=t_eval, rtol=1e-13, atol=1e-13, method='LSODA')
+        last_state = sol.y.T[-1]
+        Fx = last_state[:3] - x0_coords
+        return -float(np.dot(Fx, Fx))
+
+    cons = ({
+        'type': 'ineq',
+        'fun': lambda u: float(radius**2 - np.dot(u, u)),
+    },)
+
+    inits: list[np.ndarray] = []
+    if init_strategy == 'linear':
+        v_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+        inits = [float(radius) * v_hat]
+    else:
+        inits = [np.zeros(6)]
+        for i in range(6):
+            e = np.zeros(6)
+            e[i] = radius
+            inits.append(e)
+            inits.append(-e)
+        rng = np.random.default_rng(2025)
+        for _ in range(n_random_starts):
+            u = rng.normal(0.0, 1.0, 6)
+            nu = np.linalg.norm(u)
+            inits.append((radius * u / nu) if nu > 1e-12 else np.zeros(6))
+
+    best_val = -np.inf
+    best_u: np.ndarray | None = None
+
+    for u0 in inits:
+        res = minimize(
+            objective_u,
+            u0,
+            method='SLSQP',
+            constraints=cons,
+            options={'ftol': 1e-12, 'maxiter': 500, 'disp': False},
+        )
+        val = -res.fun
+        if val > best_val:
+            best_val = float(val)
+            best_u = np.array(res.x, dtype=float)
+
+    best_norm = np.sqrt(max(best_val, 0.0))
+    x_best = d * (best_u if best_u is not None else np.zeros(6))
+
+    if verbose and best_u is not None:
+        y0 = initial_state_np + x_best
+        t_span = (0.0, float(T))
+        t_eval = np.linspace(t_span[0], t_span[1], 1000)
+        sol = solve_ivp(cr3bp, t_span, y0, t_eval=t_eval, rtol=1e-13, atol=1e-13, method='LSODA')
+        last_state = sol.y.T[-1]
+        Fx = last_state[:3] - x0_coords
+        print('[opt-ell-int/vec] x:', np.array2string(x_best, precision=6), '||F||=', float(np.linalg.norm(Fx)))
+
+    return best_norm, x_best
+
 def get_maxdev_linear_ellipsoid(
     xf: DA,
     std_pos: float,
@@ -1500,6 +1780,28 @@ def get_maxdev_linear_ellipsoid_argmax_vector(
         return (v1 / nrm) if nrm > 0 else np.zeros(6)
     except Exception:
         return np.zeros(6)
+
+
+def get_maxdev_linear_ellipsoid_with_vector(
+    xf: DA,
+    std_pos: float,
+    std_vel: float,
+    radius: float,
+) -> tuple[float, np.ndarray]:
+    """
+    Линейная эллипсоидальная оценка как значение + соответствующий 6D-вектор x,
+    который достигает этого значения (начальное возмущение).
+
+    x = D * (radius * u_hat), где u_hat — правый сингулярный вектор для
+    матрицы M = A_pos @ D с наибольшим сингулярным значением.
+    Значение — это ||A_pos x||_2.
+    """
+    A_pos = np.array(xf.linear())[:3, :]
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+    u_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+    x = d * (float(radius) * u_hat)
+    val = float(np.linalg.norm(A_pos @ x))
+    return val, x
 
 
 def main():
@@ -1669,8 +1971,68 @@ def main_new():
         radius=radius,
     )
 
+    # Визуализация эллипсоида и аргмакс-векторов для пяти методов
+    #  - sampling (ellipsoid)
+    #  - linear ellipsoid
+    #  - DA optimization (multistart)
+    #  - IVP optimization (multistart)
+    #  - Floquet (monodromy eigen)
 
-    # Вывод результатов (DU и км)
+    # Векторный вариант семплинга: используем такую же конфигурацию, как выше
+    dev_sampling_val, vec_sampling = get_maxdev_sampling_ellipsoid_with_vector(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        derorder=derorder,
+        amount_of_points=100_000,
+        radius=radius,
+    )
+
+    # Линейная эллипсоидальная оценка с вектором
+    dev_linear_val, vec_linear = get_maxdev_linear_ellipsoid_with_vector(
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+    )
+
+    # DA optimization (multistart) с вектором
+    dev_da_val, vec_da = get_maxdev_optimization_ellipsoid_with_vector(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=10,
+        init_strategy='multi',
+    )
+
+    # IVP optimization (multistart) с вектором
+    dev_ivp_val, vec_ivp = get_maxdev_optimization_ellipsoid_integrate_with_vector(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=10,
+        init_strategy='multi',
+    )
+
+    # Floquet с вектором (v_proj)
+    dev_floq_val, vec_floq = get_maxdev_floquet_ellipsoid_with_vector(
+        orbit_type,
+        orbit_num,
+        std_pos,
+        std_vel,
+        radius=radius,
+    )
+
     print()
     print()
     print()
@@ -1678,14 +2040,68 @@ def main_new():
     print(f"orbit={orbit_type} #{orbit_num}, derorder={derorder}, radius={radius}")
     print(f"sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
     print()
-    print(f"1) sampling (ellipsoid): {du2km(dev_sampling_ell):.6f} km")
-    print(f"2) linear ellipsoid (semi-analytic formula): {du2km(dev_linear_ell):.6f} km")
+    print(f"1) sampling (ellipsoid): {du2km(dev_sampling_val):.6f} km")
+    print(f"2) linear ellipsoid (semi-analytic formula): {du2km(dev_linear_val):.6f} km")
     print(f"3) DA optimization (1 linear ic): {du2km(dev_opt_ell_lin):.6f} km")
-    print(f"4) DA optimization (mulristart): {du2km(dev_opt_ell_multi):.6f} km")
+    print(f"4) DA optimization (mulristart): {du2km(dev_da_val):.6f} km")
     print(f"5) IVP optimization (1 linear ic): {du2km(dev_opt_ell_int_lin):.6f} km")
-    print(f"6) IVP optimization (multistart): {du2km(dev_opt_ell_int_multi):.6f} km")
-    print(f"7) Floquet (monodromy eigen): {du2km(dev_floquet):.6f} km")
+    print(f"6) IVP optimization (multistart): {du2km(dev_ivp_val):.6f} km")
+    print(f"7) Floquet (monodromy eigen): {du2km(dev_floq_val):.6f} km")
     print()
+
+    def _plot_ellipsoid_and_vectors(pos_sigma: float, r: float, vecs: dict[str, np.ndarray], title: str | None = None):
+        a = b = c = r * pos_sigma
+        u = np.linspace(0, 2 * np.pi, 60)
+        v = np.linspace(0, np.pi, 30)
+        X = a * np.outer(np.cos(u), np.sin(v))
+        Y = b * np.outer(np.sin(u), np.sin(v))
+        Z = c * np.outer(np.ones_like(u), np.cos(v))
+
+        fig = plt.figure(figsize=(7, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(X, Y, Z, color='lightgray', alpha=0.25, linewidth=0)
+
+        color_cycle = {
+            'sampling': 'tab:blue',
+            'linear ellipsoid': 'tab:orange',
+            'DA opt (multistart)': 'tab:green',
+            'IVP opt (multistart)': 'tab:red',
+            'Floquet': 'tab:purple',
+        }
+
+        for name, vec6 in vecs.items():
+            p = vec6[:3]
+            ax.plot([0, p[0]], [0, p[1]], [0, p[2]],
+                    color=color_cycle.get(name, None), label=name)
+
+        lim = r * pos_sigma
+        ax.set_xlim([-lim, lim])
+        ax.set_ylim([-lim, lim])
+        ax.set_zlim([-lim, lim])
+        ax.set_xlabel('dx (DU)')
+        ax.set_ylabel('dy (DU)')
+        ax.set_zlabel('dz (DU)')
+        if title:
+            ax.set_title(title)
+        ax.legend(loc='upper left')
+        ax.set_box_aspect([1, 1, 1])
+        plt.tight_layout()
+        plt.show()
+
+    vecs_map = {
+        'sampling': vec_sampling,
+        'linear ellipsoid': vec_linear,
+        'DA opt (multistart)': vec_da,
+        'IVP opt (multistart)': vec_ivp,
+        'Floquet': vec_floq,
+    }
+
+    _plot_ellipsoid_and_vectors(
+        pos_sigma=std_pos,
+        r=radius,
+        vecs=vecs_map,
+        title=f"Initial position ellipsoid (radius={radius}·σ_pos) and argmax vectors",
+    )
 
 if __name__ == "__main__":
     main_new()
