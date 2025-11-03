@@ -1134,12 +1134,33 @@ def get_maxdev_optimization_ellipsoid(
       subject to  (x_1/σ_pos)^2 + (x_2/σ_pos)^2 + (x_3/σ_pos)^2
                 + (x_4/σ_vel)^2 + (x_5/σ_vel)^2 + (x_6/σ_vel)^2  ≤  radius^2
 
-    Реализация через переобозначение x = D u, где
-      D = diag([σ_pos, σ_pos, σ_pos, σ_vel, σ_vel, σ_vel]),  ||u||_2 ≤ radius
+    Реализация через замену x = D u, где
+      D = diag([σ_pos, σ_pos, σ_pos, σ_vel, σ_vel, σ_vel]),  и ||u||_2 ≤ radius.
 
-    Оптимизируем по u с SLSQP и ограничением 9 - ||u||^2 ≥ 0. Запускаем мультимодальные старты.
+    Аргументы:
+      - orbit_type (str): Тип орбиты, 'L1' или 'L2'.
+      - number_of_orbit (int): Номер орбиты (1‑индексация) в таблице исходных НУ.
+      - xf (DA): DA‑карта потока за период; используется для оценки F(x) без интегрирования.
+      - std_pos (float): Стандартное отклонение по положениям в DU (безразмерные ед.).
+      - std_vel (float): Стандартное отклонение по скоростям в VU (безразмерные ед.).
+      - radius (float): Радиус эллипсоида в whitened‑пространстве (число σ). По умолчанию 3.0.
+      - verbose (bool): Если True — печатает диагностику найденного максимума.
+      - n_random_starts (int): Количество ДОПОЛНИТЕЛЬНЫХ случайных стартов в режиме
+          init_strategy='multi'. Помимо случайных стартов всегда добавляются
+          детерминированные начальные точки: нулевая, а также ±radius вдоль
+          каждой оси (итого 13 точек без учёта случайных). Случайные старты
+          равномерно распределены по сфере ||u||=radius в whitened‑пространстве
+          (нормальная выборка с последующей нормировкой), генератор с фиксированным
+          seed=2025 для воспроизводимости. Установите 0, чтобы отключить случайные
+          старты. Параметр игнорируется при init_strategy='linear'. Увеличение
+          значения повышает шанс найти больший локальный максимум, но увеличивает
+          время вычислений.
+      - init_strategy (str): 'multi' — мультистарт (ноль, базисы, случайные на сфере);
+                              'linear' — один старт из линейной оценки (правый сингулярный вектор A_pos D,
+                              умноженный на radius).
 
-    Возвращает максимальную норму отклонения (float) в DU.
+    Возвращает:
+      - float: Максимальная норма отклонения позиции через период (в DU).
     """
     # Центральная точка для вычитания (позиции)
     x0, z0, vy0, T, _, _ = initial_state_parser(orbit_type, number_of_orbit)
@@ -1240,18 +1261,38 @@ def get_maxdev_optimization_ellipsoid_integrate(
     """
     Максимизация ||F(x)|| на эллипсоиде неопределенности с «честной» интеграцией.
 
-    Вместо DA-аппроксимации (xf.eval(x)) целевая функция вычисляется численно
-    через интегрирование CR3BP из возмущённого начального состояния до периода T
-    методом `solve_ivp(..., method='LSODA')`.
+    Вместо DA‑аппроксимации (xf.eval(x)) целевая функция считается численно:
+    интегрируем CR3BP из возмущённого состояния до периода T методом
+    `solve_ivp(..., method='LSODA', rtol=1e-13, atol=1e-13)` и берём норму
+    позиционного отклонения ||pos(T; x0+x) − pos(x0)||.
 
-    Формулировка ограничения (эллипсоид в пространстве начальных возмущений x):
+    Формулировка ограничения (эллипсоид в пространстве x):
       (x_1/σ_pos)^2 + (x_2/σ_pos)^2 + (x_3/σ_pos)^2
     + (x_4/σ_vel)^2 + (x_5/σ_vel)^2 + (x_6/σ_vel)^2 ≤ radius^2
 
-    Переход к переменной u: x = D u, где
-      D = diag([σ_pos]*3 + [σ_vel]*3), ||u||_2 ≤ radius.
+    Переход к переменной u: x = D u, где D = diag([σ_pos]*3 + [σ_vel]*3), ||u||_2 ≤ radius.
 
-    Возвращает максимум нормы отклонения (DU) для позиционной части через период.
+    Аргументы:
+      - orbit_type (str): Тип орбиты, 'L1' или 'L2'.
+      - number_of_orbit (int): Номер орбиты (1‑индексация) в таблице исходных НУ.
+      - xf (DA): Не используется, сохранён для совместимости интерфейса.
+      - std_pos (float): Стандартное отклонение по положениям в DU (безразмерные ед.).
+      - std_vel (float): Стандартное отклонение по скоростям в VU (безразмерные ед.).
+      - radius (float): Радиус эллипсоида в whitened‑пространстве (число σ). По умолчанию 3.0.
+      - verbose (bool): Если True — печатает диагностику найденного максимума.
+      - n_random_starts (int): Количество ДОПОЛНИТЕЛЬНЫХ случайных стартов в режиме
+          init_strategy='multi'. Помимо случайных стартов всегда добавляются
+          детерминированные начальные точки: нулевая, а также ±radius вдоль
+          каждой оси (итого 13 точек без учёта случайных). Случайные старты
+          равномерно распределены по сфере ||u||=radius в whitened‑пространстве
+          (нормальная выборка с последующей нормировкой), генератор с фиксированным
+          seed=2025 для воспроизводимости. Установите 0, чтобы отключить случайные
+          старты. Параметр игнорируется при init_strategy='linear'. Ввиду высокой
+          стоимости интегрирования рекомендуется 0 или небольшие значения.
+      - init_strategy (str): 'multi' — мультистарт; 'linear' — один старт из линейной оценки.
+
+    Возвращает:
+      - float: Максимальная норма отклонения позиции через период (в DU).
     """
 
     # Базовая (центральная) точка орбиты и период.
@@ -1325,7 +1366,7 @@ def get_maxdev_optimization_ellipsoid_integrate(
             u0,
             method='SLSQP',
             constraints=cons,
-            options={'ftol': 1e-12, 'maxiter': 500, 'disp': True},
+            options={'ftol': 1e-12, 'maxiter': 500, 'disp': False},
         )
         val = -res.fun
         if val > best_val:
@@ -1489,8 +1530,8 @@ def main_new():
     Печатает значения в DU и км для наглядного сравнения.
     """
     # Конфигурация эксперимента
-    orbit_type, orbit_num = "L1", 192
-    std_pos, std_vel = km2du(1.), kmS2vu(0.01e-3)
+    orbit_type, orbit_num = "L1", 1
+    std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
     radius = 4.0
     derorder = 3
 
@@ -1505,7 +1546,7 @@ def main_new():
         std_pos,
         std_vel,
         derorder=derorder,
-        amount_of_points=10_000,
+        amount_of_points=100_000,
         radius=radius,
     )
 
@@ -1518,19 +1559,7 @@ def main_new():
     )
 
     # 3) Оптимизация на эллипсоиде (DA), старт из линейной модели
-    dev_opt_ell = get_maxdev_optimization_ellipsoid(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        radius=radius,
-        verbose=False,
-        init_strategy='linear',  # один старт по линейному приближению
-    )
-
-    # 4) Оптимизация на эллипсоиде (интегрирование), старт из линейной модели
-    dev_opt_ell_int = get_maxdev_optimization_ellipsoid_integrate(
+    dev_opt_ell_lin = get_maxdev_optimization_ellipsoid(
         orbit_type,
         orbit_num,
         xf,
@@ -1539,17 +1568,65 @@ def main_new():
         radius=radius,
         verbose=False,
         n_random_starts=0,
-        init_strategy='linear',  # один старт по линейному приближению
+        init_strategy='linear',
     )
 
+    # 4) Оптимизация на эллипсоиде (DA), мультистарт
+    dev_opt_ell_multi = get_maxdev_optimization_ellipsoid(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=10,
+        init_strategy='multi',
+    )
+
+    # 5) Оптимизация на эллипсоиде (интегрирование), старт из линейной модели
+    dev_opt_ell_int_lin = get_maxdev_optimization_ellipsoid_integrate(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=0,
+        init_strategy='linear',
+    )
+
+    # 6) Оптимизация на эллипсоиде (интегрирование), мультистарт
+    dev_opt_ell_int_multi = get_maxdev_optimization_ellipsoid_integrate(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=10,
+        init_strategy='multi',
+    )
+
+
     # Вывод результатов (DU и км)
+    print()
+    print()
+    print()
     print("=== Comparison: Ellipsoid-Based Deviation Estimates ===")
     print(f"orbit={orbit_type} #{orbit_num}, derorder={derorder}, radius={radius}")
     print(f"sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
-    print(f"1) sampling (ellipsoid, q=0.999): {dev_sampling_ell:.6e} DU  |  {du2km(dev_sampling_ell):.6f} km")
-    print(f"2) linear ellipsoid (semi-analytic formula):   {dev_linear_ell:.6e} DU  |  {du2km(dev_linear_ell):.6f} km")
-    print(f"3) DA optimization (linear init): {dev_opt_ell:.6e} DU  |  {du2km(dev_opt_ell):.6f} km")
-    print(f"4) IVP optimization (linear init): {dev_opt_ell_int:.6e} DU |  {du2km(dev_opt_ell_int):.6f} km")
+    print(f"1) sampling (ellipsoid): {du2km(dev_sampling_ell):.6f} km")
+    print(f"2) linear ellipsoid (semi-analytic formula): {du2km(dev_linear_ell):.6f} km")
+    print(f"3) DA optimization (1 linear ic): {du2km(dev_opt_ell_lin):.6f} km")
+    print(f"4) DA optimization (mulristart): {du2km(dev_opt_ell_multi):.6f} km")
+    print(f"5) IVP optimization (1 linear ic): {du2km(dev_opt_ell_int_lin):.6f} km")
+    print(f"5) IVP optimization (multistart): {du2km(dev_opt_ell_int_multi):.6f} km")
+    print()
+    print()
+    print()
 
 
 if __name__ == "__main__":
