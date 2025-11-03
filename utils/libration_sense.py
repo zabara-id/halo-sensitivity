@@ -965,6 +965,51 @@ def get_monodromy_matrix(orbit_type: str,
     return monodromy_matrix
 
 
+def get_maxdev_floquet_ellipsoid(
+    orbit_type: str,
+    number_of_orbit: int,
+    std_pos: float,
+    std_vel: float,
+    radius: float = 3.0,
+) -> float:
+    """
+    Классическая (Флоке) оценка максимального отклонения на эллипсоиде неопределенности.
+
+    Шаги:
+      1) Находим максимальный по модулю множитель монодромии (берём MAX_MUL из CSV)
+         и соответствующий ему собственный вектор матрицы монодромии M.
+      2) Проецируем этот собственный вектор на границу эллипсоида неопределенности
+         в 6D: (x_1/σ_pos)^2 + ... + (x_3/σ_pos)^2 + (x_4/σ_vel)^2 + ... ≤ radius^2.
+         То есть нормируем векторально в «whitened»‑норме и масштабируем на radius.
+      3) Умножаем полученный вектор на MAX_MUL, берём норму координатной части (3D).
+
+    Возвращает норму позиции конечного отклонения (в DU).
+    """
+    # 0) Данные орбиты и монодромия
+    x0, z0, vy0, T, JACOBI, MAX_MUL = initial_state_parser(orbit_type, number_of_orbit)
+    M = get_monodromy_matrix(orbit_type, number_of_orbit)
+
+    # 1) Собственные значения/векторы; берём тот, чья |λ| ближе всего к MAX_MUL
+    eigvals, eigvecs = np.linalg.eig(M)
+    idx = int(np.argmin(np.abs(np.abs(eigvals) - float(MAX_MUL))))
+    v = eigvecs[:, idx]
+
+    # Делаем вектор вещественным (ожидается реальный; берём действительную часть)
+    if np.iscomplexobj(v):
+        v = np.real(v)
+
+    # 2) Проекция на границу эллипсоида в whitened‑норме
+    d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
+    denom = float(np.linalg.norm(v / d))
+    if denom == 0.0 or not np.isfinite(denom):
+        return 0.0
+    v_proj = (float(radius) / denom) * v  # начальное отклонение на границе эллипсоида
+
+    # 3) «Проход через период» по Флоке: масштабирование на MAX_MUL
+    delta_final = float(MAX_MUL) * v_proj
+    return float(np.linalg.norm(delta_final[:3]))
+
+
 def get_maxdev_optimization_no_integrate(
         orbit_type: str,
         number_of_orbit: int,
@@ -1607,6 +1652,15 @@ def main_new():
         init_strategy='multi',
     )
 
+    # 7) Классика Флоке (монодромия, макс. собственный вектор)
+    dev_floquet = get_maxdev_floquet_ellipsoid(
+        orbit_type,
+        orbit_num,
+        std_pos,
+        std_vel,
+        radius=radius,
+    )
+
 
     # Вывод результатов (DU и км)
     print()
@@ -1620,7 +1674,8 @@ def main_new():
     print(f"3) DA optimization (1 linear ic): {du2km(dev_opt_ell_lin):.6f} km")
     print(f"4) DA optimization (mulristart): {du2km(dev_opt_ell_multi):.6f} km")
     print(f"5) IVP optimization (1 linear ic): {du2km(dev_opt_ell_int_lin):.6f} km")
-    print(f"5) IVP optimization (multistart): {du2km(dev_opt_ell_int_multi):.6f} km")
+    print(f"6) IVP optimization (multistart): {du2km(dev_opt_ell_int_multi):.6f} km")
+    print(f"7) Floquet (monodromy eigen): {du2km(dev_floquet):.6f} km")
     print()
     print()
     print()
