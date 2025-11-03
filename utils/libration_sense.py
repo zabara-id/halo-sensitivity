@@ -993,10 +993,18 @@ def get_maxdev_floquet_ellipsoid(
     eigvals, eigvecs = np.linalg.eig(M)
     idx = int(np.argmin(np.abs(np.abs(eigvals) - float(MAX_MUL))))
     v = eigvecs[:, idx]
+    lam = float(eigvals[idx])
 
     # Делаем вектор вещественным (ожидается реальный; берём действительную часть)
     if np.iscomplexobj(v):
         v = np.real(v)
+
+    print()
+    print("!!!")
+    print("MAX_MUL = ", MAX_MUL)
+    print("LAM = ", lam)
+    print("FOUND EIG VEC = ", v)
+    print()
 
     # 2) Проекция на границу эллипсоида в whitened‑норме
     d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
@@ -1006,7 +1014,7 @@ def get_maxdev_floquet_ellipsoid(
     v_proj = (float(radius) / denom) * v  # начальное отклонение на границе эллипсоида
 
     # 3) «Проход через период» по Флоке: масштабирование на MAX_MUL
-    delta_final = float(MAX_MUL) * v_proj
+    delta_final = lam * v_proj
     return float(np.linalg.norm(delta_final[:3]))
 
 
@@ -1669,6 +1677,7 @@ def main_new():
     print("=== Comparison: Ellipsoid-Based Deviation Estimates ===")
     print(f"orbit={orbit_type} #{orbit_num}, derorder={derorder}, radius={radius}")
     print(f"sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
+    print()
     print(f"1) sampling (ellipsoid): {du2km(dev_sampling_ell):.6f} km")
     print(f"2) linear ellipsoid (semi-analytic formula): {du2km(dev_linear_ell):.6f} km")
     print(f"3) DA optimization (1 linear ic): {du2km(dev_opt_ell_lin):.6f} km")
@@ -1677,9 +1686,6 @@ def main_new():
     print(f"6) IVP optimization (multistart): {du2km(dev_opt_ell_int_multi):.6f} km")
     print(f"7) Floquet (monodromy eigen): {du2km(dev_floquet):.6f} km")
     print()
-    print()
-    print()
-
 
 if __name__ == "__main__":
     main_new()
