@@ -436,7 +436,7 @@ wheels = [
 [[package]]
 name = "halo-sensitivity"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "daceypy" },
     { name = "jupyter" },

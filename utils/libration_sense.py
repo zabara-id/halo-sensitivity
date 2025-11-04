@@ -1882,7 +1882,7 @@ def main_new():
     Печатает значения в DU и км для наглядного сравнения.
     """
     # Конфигурация эксперимента
-    orbit_type, orbit_num = "L1", 1
+    orbit_type, orbit_num = "L1", 194
     std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
     radius = 4.0
     derorder = 3
@@ -2043,7 +2043,7 @@ def main_new():
     print(f"1) sampling (ellipsoid): {du2km(dev_sampling_val):.6f} km")
     print(f"2) linear ellipsoid (semi-analytic formula): {du2km(dev_linear_val):.6f} km")
     print(f"3) DA optimization (1 linear ic): {du2km(dev_opt_ell_lin):.6f} km")
-    print(f"4) DA optimization (mulristart): {du2km(dev_da_val):.6f} km")
+    print(f"4) DA optimization (multistart): {du2km(dev_da_val):.6f} km")
     print(f"5) IVP optimization (1 linear ic): {du2km(dev_opt_ell_int_lin):.6f} km")
     print(f"6) IVP optimization (multistart): {du2km(dev_ivp_val):.6f} km")
     print(f"7) Floquet (monodromy eigen): {du2km(dev_floq_val):.6f} km")
@@ -2106,8 +2106,9 @@ def main_new():
     _plot_ellipsoid_and_vectors_pretty(
         pos_sigma=std_pos,
         r=radius,
-        vecs=vecs_map,
-        title=f"Initial position ellipsoid (radius={radius}·σ_pos) and argmax vectors")
+        vecs=vecs_map
+    )
+
 
 def _plot_ellipsoid_and_vectors_pretty(
     pos_sigma: float,
@@ -2175,9 +2176,9 @@ def _plot_ellipsoid_and_vectors_pretty(
     # Оси‑стрелки для ориентира
     lim = r * pos_sigma
     axis_len = lim
-    ax.quiver(0, 0, 0, axis_len, 0, 0, color='gray', arrow_length_ratio=0.02, alpha=0.5)
-    ax.quiver(0, 0, 0, 0, axis_len, 0, color='gray', arrow_length_ratio=0.02, alpha=0.5)
-    ax.quiver(0, 0, 0, 0, 0, axis_len, color='gray', arrow_length_ratio=0.02, alpha=0.5)
+    ax.quiver(0, 0, 0, axis_len, 0, 0, color='gray', arrow_length_ratio=0.02, alpha=0.5, linewidth=0.5)
+    ax.quiver(0, 0, 0, 0, axis_len, 0, color='gray', arrow_length_ratio=0.02, alpha=0.5, linewidth=0.5)
+    ax.quiver(0, 0, 0, 0, 0, axis_len, color='gray', arrow_length_ratio=0.02, alpha=0.5, linewidth=0.5)
     ax.text(axis_len, 0, 0, 'x', color='gray')
     ax.text(0, axis_len, 0, 'y', color='gray')
     ax.text(0, 0, axis_len, 'z', color='gray')
