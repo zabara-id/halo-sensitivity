@@ -6,8 +6,10 @@ from scipy.interpolate import make_interp_spline
 from utils.libration_sense import du2km, tu2days
 
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(current_dir, "koefficients_data_L2.csv")
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# file_path = os.path.join(current_dir, "koefficients_data_L2.csv")
+file_path = "data/output/coefs_final/L2_wide_range.csv"
+
 df = pd.read_csv(file_path)
 
 df.sort_values('T', inplace=True)

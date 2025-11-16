@@ -18,7 +18,7 @@ SEED = None
 REUSE_NOISE = True
 AMOUNT_OF_POINTS = 11_000
 
-OUTPATH = "data/output/coefs_final/L2_wide_range.csv"
+OUTPATH = "data/output/coefs_final/L2_wide_range_ell.csv"
 HEADER = ["Orbit Number", "T", "Alpha1", "Alpha2", "n", "Deviation Max"]
 
 
@@ -87,7 +87,7 @@ def compute_one(orbit_number: int):
         alpha2 = float(alpha[1])
 
         return (orbit_number, float(T), alpha1, alpha2, float(n_perf), float(deviation_max_km), None)
-    except Exception as e:
+    except Exception as e: 
         # вернём ошибку, чтобы главный процесс мог залогировать и идти дальше
         return (orbit_number, None, None, None, None, None, str(e))
 

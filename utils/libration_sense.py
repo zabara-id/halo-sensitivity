@@ -1805,73 +1805,6 @@ def get_maxdev_linear_ellipsoid_with_vector(
 
 
 def main():
-
-    orbit_type, orbit_num = "L1", 92
-    std_pos, std_vel = km2du(2.4), kmS2vu(0.01e-3)
-
-    derorder = 3
-
-    # получаем DA-объект через виток гало-орбиты
-    xf = get_xf(orbit_type, orbit_num, derorder=derorder)
-
-    # получаем отклонение через виток, используя технику семплирования
-    dev_sampling = get_maxdev_sampling_no_integrate(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        derorder=derorder,
-        amount_of_points=10_000
-    )
-
-    dev_optimization = get_maxdev_optimization_no_integrate(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        verbose=False,
-    )
-    
-    # Линейный максимум по 64 углам бокса
-    dev_linear_corner = get_maxdev_linear_corner_max(
-        xf,
-        std_pos,
-        std_vel,
-    )
-    
-    # Эллипсоидальная оптимизация (радиус задаётся явно)
-    dev_ellipsoid = get_maxdev_optimization_ellipsoid(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        radius=4.0,
-        verbose=False,
-    )
-
-    # Линейная эллипсоидальная оценка (аналитика)
-    dev_linear_ellipsoid = get_maxdev_linear_ellipsoid(
-        xf,
-        std_pos,
-        std_vel,
-        radius=4.0,
-    )
-
-    # Сравнение (DU и км). Семплинг возвращает 0.99-квантиль, оптимизация — максимум
-    print("Comparison (one-turn deviation):")
-    print(f"  orbit={orbit_type} #{orbit_num}, derorder={derorder}")
-    print(f"  sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
-    print(f"  sampling: {dev_sampling:.6e} DU  |  {du2km(dev_sampling):.6f} km")
-    # print(f"  optimization max: {dev_optimization:.6e} DU  |  {du2km(dev_optimization):.6f} km")
-    # print(f"  linear corner max: {dev_linear_corner:.6e} DU  |  {du2km(dev_linear_corner):.6f} km")
-    print(f"  ellipsoid max: {dev_ellipsoid:.6e} DU  |  {du2km(dev_ellipsoid):.6f} km")
-    print(f"  linear ellipsoid: {dev_linear_ellipsoid:.6e} DU  |  {du2km(dev_linear_ellipsoid):.6f} km")
-
-
-def main_new():
     """
     Сравнительный эксперимент:
       1) семплирование с эллипсоидной проекцией (0.999-квантиль),
@@ -2069,10 +2002,19 @@ def main_new():
             'Floquet': 'tab:purple',
         }
 
+        # Подписи легенды на русском
+        ru_labels = {
+            'sampling': 'семплинг (эллипсоид)',
+            'linear ellipsoid': 'линейный эллипсоид',
+            'DA opt (multistart)': 'ДА‑опт (мультистарт)',
+            'IVP opt (multistart)': 'ОДУ‑опт (мультистарт)',
+            'Floquet': 'Флоке',
+        }
+
         for name, vec6 in vecs.items():
             p = vec6[:3]
             ax.plot([0, p[0]], [0, p[1]], [0, p[2]],
-                    color=color_cycle.get(name, None), label=name)
+                    color=color_cycle.get(name, None), label=ru_labels.get(name, name))
 
         lim = r * pos_sigma
         ax.set_xlim([-lim, lim])
@@ -2156,6 +2098,14 @@ def _plot_ellipsoid_and_vectors_pretty(
         'IVP opt (multistart)': 'tab:red',
         'Floquet': 'tab:purple',
     }
+    # Подписи легенды на русском
+    ru_labels = {
+        'sampling': 'семплинг (эллипсоид)',
+        'linear ellipsoid': 'линейный эллипсоид',
+        'DA opt (multistart)': 'ДА‑опт (мультистарт)',
+        'IVP opt (multistart)': 'ОДУ‑опт (мультистарт)',
+        'Floquet': 'Флоке',
+    }
     palette_fallback = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:cyan']
 
     # Стрелки‑векторы с подписями в концах
@@ -2171,7 +2121,7 @@ def _plot_ellipsoid_and_vectors_pretty(
             linewidth=1.1,
             normalize=False,
         )
-        proxies.append(Line2D([0], [0], color=color, lw=3, label=name))
+        proxies.append(Line2D([0], [0], color=color, lw=3, label=ru_labels.get(name, name)))
 
     # Оси‑стрелки для ориентира
     lim = r * pos_sigma
@@ -2198,5 +2148,188 @@ def _plot_ellipsoid_and_vectors_pretty(
     plt.tight_layout()
     plt.show()
 
+
+def main_check_trajectories():
+    orbit_type, orbit_num = "L1", 10
+    std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
+    radius = 4.0
+    derorder = 3
+
+    # DA‑карта через период (для методов 1–3)
+    xf = get_xf(orbit_type, orbit_num, derorder=derorder)
+
+    x0, z0, vy0, T, JACOBI, MAX_MUL = initial_state_parser(orbit_type, orbit_num)
+
+    central_ic_for_traj_build = np.array([x0, 0., z0, 0., vy0, 0.], dtype=float)
+
+    # Получаем векторы начальных отклонений для 5 подходов (как в main())
+    dev_sampling_val, vec_sampling = get_maxdev_sampling_ellipsoid_with_vector(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        derorder=derorder,
+        amount_of_points=100_000,
+        radius=radius,
+    )
+
+    dev_linear_val, vec_linear = get_maxdev_linear_ellipsoid_with_vector(
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+    )
+    vec_linear *= 1
+
+
+    dev_da_val, vec_da = get_maxdev_optimization_ellipsoid_with_vector(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=10,
+        init_strategy='multi',
+    )
+
+    dev_ivp_val, vec_ivp = get_maxdev_optimization_ellipsoid_integrate_with_vector(
+        orbit_type,
+        orbit_num,
+        xf,
+        std_pos,
+        std_vel,
+        radius=radius,
+        verbose=False,
+        n_random_starts=10,
+        init_strategy='multi',
+    )
+
+    dev_floq_val, vec_floq = get_maxdev_floquet_ellipsoid_with_vector(
+        orbit_type,
+        orbit_num,
+        std_pos,
+        std_vel,
+        radius=radius,
+    )
+
+    # Собираем методы и их отклонения
+    methods: list[tuple[str, np.ndarray, float]] = [
+        ("sampling (ellipsoid)", vec_sampling, dev_sampling_val),
+        ("linear ellipsoid (semi-analytic)", vec_linear, dev_linear_val),
+        ("DA optimization (multistart)", vec_da, dev_da_val),
+        ("IVP optimization (multistart)", vec_ivp, dev_ivp_val),
+        ("Floquet (monodromy eigen)", vec_floq, dev_floq_val),
+    ]
+
+    # Вспомогательная функция интегрирования траектории на один период
+    def integrate_traj(y0: np.ndarray, period: float, npts: int = 2000) -> tuple[np.ndarray, np.ndarray]:
+        t_span = (0.0, float(period))
+        t_eval = np.linspace(t_span[0], t_span[1], npts)
+        sol = solve_ivp(
+            cr3bp,
+            t_span,
+            y0,
+            t_eval=t_eval,
+            rtol=1e-14,
+            atol=1e-14,
+            method='LSODA',
+        )
+        if not sol.success:
+            print(f"Warning: integration failed (message: {sol.message})")
+        traj = sol.y.T  # shape (npts, 6)
+        return traj, traj[-1]
+
+    # Интегрируем центральную и возмущённые траектории; накапливаем итоги
+    results: dict[str, dict[str, np.ndarray | float]] = {}
+
+    # Центральная орбита
+    traj_central, last_central = integrate_traj(central_ic_for_traj_build, T)
+    results["central"] = {
+        "traj": traj_central,
+        "last": last_central,
+        "final_diff_pos": last_central[:3] - central_ic_for_traj_build[:3],
+        "final_diff_norm_du": float(np.linalg.norm(last_central[:3] - central_ic_for_traj_build[:3])),
+    }
+
+    # Остальные методы
+    for name, vec6, dev_pred_du in methods:
+        y0 = central_ic_for_traj_build + np.asarray(vec6, dtype=float)
+        traj, last = integrate_traj(y0, T)
+        diff_pos = last[:3] - central_ic_for_traj_build[:3]
+        diff_norm_du = float(np.linalg.norm(diff_pos))
+        results[name] = {
+            "traj": traj,
+            "last": last,
+            "vec": vec6,
+            "pred_dev_du": float(dev_pred_du),
+            "final_diff_pos": diff_pos,
+            "final_diff_norm_du": diff_norm_du,
+        }
+
+    # Визуализация траекторий
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+
+    color_cycle = {
+        "central": "gray",
+        "sampling (ellipsoid)": "tab:blue",
+        "linear ellipsoid (semi-analytic)": "tab:orange",
+        "DA optimization (multistart)": "tab:green",
+        "IVP optimization (multistart)": "tab:red",
+        "Floquet (monodromy eigen)": "tab:purple",
+    }
+    # Подписи легенды на русском для траекторий
+    ru_labels = {
+        "central": "центральная",
+        "central IC": "центральные НУ",
+        "sampling (ellipsoid)": "семплинг (эллипсоид)",
+        "linear ellipsoid (semi-analytic)": "линейный эллипсоид (полуаналит.)",
+        "DA optimization (multistart)": "ДА‑оптимизация (мультистарт)",
+        "IVP optimization (multistart)": "ОДУ‑оптимизация (мультистарт)",
+        "Floquet (monodromy eigen)": "Флоке (собст. монодромии)",
+    }
+
+    # Центральная
+    tr = results["central"]["traj"]  # type: ignore[index]
+    ax.plot(tr[:, 0], tr[:, 1], tr[:, 2], color=color_cycle["central"], label=ru_labels.get("central", "central"), linewidth=1.5, linestyle='--')
+    # Центральная начальная точка
+    ax.scatter(central_ic_for_traj_build[0],
+               central_ic_for_traj_build[1],
+               central_ic_for_traj_build[2],
+               color='k', s=30, marker='o', label=ru_labels.get('central IC', 'central IC'), zorder=5)
+
+    # Возмущённые
+    for name, _, _ in methods:
+        trm = results[name]["traj"]  # type: ignore[index]
+        ax.plot(trm[:, 0], trm[:, 1], trm[:, 2], color=color_cycle.get(name, None), label=ru_labels.get(name, name), linewidth=1.2)
+
+    ax.set_xlabel('x (DU)')
+    ax.set_ylabel('y (DU)')
+    ax.set_zlabel('z (DU)')
+    ax.set_title(f"Trajectories over one period T (orbit {orbit_type} #{orbit_num})")
+    ax.legend(loc='upper left')
+    ax.set_box_aspect([1, 1, 1])
+    plt.tight_layout()
+    plt.show()
+
+    # Печать сравнений предсказаний vs интегрирования
+    print()
+    print("=== Final-position differences after 1 period (validation) ===")
+    print(f"orbit={orbit_type} #{orbit_num}, derorder={derorder}, radius={radius}")
+    print(f"sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
+    print()
+    # Центральная
+    cen_du = results["central"]["final_diff_norm_du"]  # type: ignore[index]
+    print(f"central: diff={du2km(cen_du):.6f} km (should be ~0)")
+
+    for name, _, _ in methods:
+        diff_du = results[name]["final_diff_norm_du"]  # type: ignore[index]
+        pred_du = results[name]["pred_dev_du"]  # type: ignore[index]
+        print(f"{name}: predicted={du2km(float(pred_du)):.6f} km, integrated={du2km(float(diff_du)):.6f} km")
+
+
 if __name__ == "__main__":
-    main_new()
+    main_check_trajectories()

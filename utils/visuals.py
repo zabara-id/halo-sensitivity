@@ -100,17 +100,17 @@ def deviation_graph(orbit_type: str,
         for i, std_pos in enumerate(std_pos_values):
             for j, std_vel in enumerate(std_vel_values):
                 results[i, j] = du2km(
-                    # get_maxdev_sampling_no_integrate(
-                    #     orbit_type,
-                    #     number_of_orbit,
-                    #     xfinal,
-                    #     std_pos,
-                    #     std_vel,
-                    #     derorder=derorder,
-                    #     amount_of_points=number_of_points,
-                    #     unit_deltas=unit_deltas,
-                    #     seed=None
-                    # )
+                    get_maxdev_sampling_no_integrate(
+                        orbit_type,
+                        number_of_orbit,
+                        xfinal,
+                        std_pos,
+                        std_vel,
+                        derorder=derorder,
+                        amount_of_points=number_of_points,
+                        unit_deltas=unit_deltas,
+                        seed=None
+                    )
 
                     # get_maxdev_optimization_no_integrate(
                     #     orbit_type,
@@ -120,14 +120,14 @@ def deviation_graph(orbit_type: str,
                     #     std_vel
                     # )
 
-                    get_maxdev_optimization_ellipsoid(
-                        orbit_type,
-                        number_of_orbit,
-                        xfinal,
-                        std_pos,
-                        std_vel,
-                        radius=4.0,
-                    )
+                    # get_maxdev_optimization_ellipsoid(
+                    #     orbit_type,
+                    #     number_of_orbit,
+                    #     xfinal,
+                    #     std_pos,
+                    #     std_vel,
+                    #     radius=4.0,
+                    # )
                 )
                 pbar.update(1)
 
@@ -187,7 +187,7 @@ def main1():
 
 
 def main2():
-    deviation_graph('L2', 1, number_of_points=10_000, number_of_turns=1, grid_density=10)
+    deviation_graph('L1', 10, number_of_points=10_000, number_of_turns=1, grid_density=7)
 
 
 if __name__ == "__main__":
