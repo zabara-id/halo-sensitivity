@@ -1982,54 +1982,6 @@ def main():
     print(f"7) Floquet (monodromy eigen): {du2km(dev_floq_val):.6f} km")
     print()
 
-    def _plot_ellipsoid_and_vectors(pos_sigma: float, r: float, vecs: dict[str, np.ndarray], title: str | None = None):
-        a = b = c = r * pos_sigma
-        u = np.linspace(0, 2 * np.pi, 60)
-        v = np.linspace(0, np.pi, 30)
-        X = a * np.outer(np.cos(u), np.sin(v))
-        Y = b * np.outer(np.sin(u), np.sin(v))
-        Z = c * np.outer(np.ones_like(u), np.cos(v))
-
-        fig = plt.figure(figsize=(7, 6))
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(X, Y, Z, color='lightgray', alpha=0.25, linewidth=0)
-
-        color_cycle = {
-            'sampling': 'tab:blue',
-            'linear ellipsoid': 'tab:orange',
-            'DA opt (multistart)': 'tab:green',
-            'IVP opt (multistart)': 'tab:red',
-            'Floquet': 'tab:purple',
-        }
-
-        # Подписи легенды на русском
-        ru_labels = {
-            'sampling': 'семплинг (эллипсоид)',
-            'linear ellipsoid': 'линейный эллипсоид',
-            'DA opt (multistart)': 'ДА‑опт (мультистарт)',
-            'IVP opt (multistart)': 'ОДУ‑опт (мультистарт)',
-            'Floquet': 'Флоке',
-        }
-
-        for name, vec6 in vecs.items():
-            p = vec6[:3]
-            ax.plot([0, p[0]], [0, p[1]], [0, p[2]],
-                    color=color_cycle.get(name, None), label=ru_labels.get(name, name))
-
-        lim = r * pos_sigma
-        ax.set_xlim([-lim, lim])
-        ax.set_ylim([-lim, lim])
-        ax.set_zlim([-lim, lim])
-        ax.set_xlabel('dx (DU)')
-        ax.set_ylabel('dy (DU)')
-        ax.set_zlabel('dz (DU)')
-        if title:
-            ax.set_title(title)
-        ax.legend(loc='upper left')
-        ax.set_box_aspect([1, 1, 1])
-        plt.tight_layout()
-        plt.show()
-
     vecs_map = {
         'sampling': vec_sampling,
         'linear ellipsoid': vec_linear,
@@ -2149,7 +2101,7 @@ def _plot_ellipsoid_and_vectors_pretty(
     plt.show()
 
 
-def main_check_trajectories():
+def main_check_predictions():
     orbit_type, orbit_num = "L1", 10
     std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
     radius = 4.0
@@ -2332,4 +2284,4 @@ def main_check_trajectories():
 
 
 if __name__ == "__main__":
-    main_check_trajectories()
+    main()
