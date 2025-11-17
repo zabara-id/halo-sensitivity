@@ -1840,94 +1840,13 @@ def main():
     Печатает значения в DU и км для наглядного сравнения.
     """
     # Конфигурация эксперимента
-    orbit_type, orbit_num = "L1", 10
+    orbit_type, orbit_num = "L1", 11
     std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
     radius = 4.0
     derorder = 3
 
     # DA‑карта через период (для методов 1–3)
     xf = get_xf(orbit_type, orbit_num, derorder=derorder)
-
-    # 1) Семплирование в эллипсоиде (0.999‑квантиль)
-    dev_sampling_ell = get_maxdev_sampling_ellipsoid(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        derorder=derorder,
-        amount_of_points=100_000,
-        radius=radius,
-    )
-
-    # 2) Линейная эллипсоидальная оценка (аналитика)
-    dev_linear_ell = get_maxdev_linear_ellipsoid(
-        xf,
-        std_pos,
-        std_vel,
-        radius=radius,
-    )
-
-    # 3) Оптимизация на эллипсоиде (DA), старт из линейной модели
-    dev_opt_ell_lin = get_maxdev_optimization_ellipsoid(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        radius=radius,
-        verbose=False,
-        n_random_starts=0,
-        init_strategy='linear',
-    )
-
-    # 4) Оптимизация на эллипсоиде (DA), мультистарт
-    dev_opt_ell_multi = get_maxdev_optimization_ellipsoid(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        radius=radius,
-        verbose=False,
-        n_random_starts=10,
-        init_strategy='multi',
-    )
-
-    # 5) Оптимизация на эллипсоиде (интегрирование), старт из линейной модели
-    dev_opt_ell_int_lin = get_maxdev_optimization_ellipsoid_integrate(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        radius=radius,
-        verbose=False,
-        n_random_starts=0,
-        init_strategy='linear',
-    )
-
-    # 6) Оптимизация на эллипсоиде (интегрирование), мультистарт
-    dev_opt_ell_int_multi = get_maxdev_optimization_ellipsoid_integrate(
-        orbit_type,
-        orbit_num,
-        xf,
-        std_pos,
-        std_vel,
-        radius=radius,
-        verbose=False,
-        n_random_starts=10,
-        init_strategy='multi',
-    )
-
-    # 7) Классика Флоке (монодромия, макс. собственный вектор)
-    dev_floquet = get_maxdev_floquet_ellipsoid(
-        orbit_type,
-        orbit_num,
-        std_pos,
-        std_vel,
-        radius=radius,
-    )
 
     # Визуализация эллипсоида и аргмакс-векторов для пяти методов
     #  - sampling (ellipsoid)
@@ -1936,7 +1855,7 @@ def main():
     #  - IVP optimization (multistart)
     #  - Floquet (monodromy eigen)
 
-    # Векторный вариант семплинга: используем такую же конфигурацию, как выше
+    # 1) 
     dev_sampling_val, vec_sampling = get_maxdev_sampling_ellipsoid_with_vector(
         orbit_type,
         orbit_num,
@@ -1966,7 +1885,7 @@ def main():
         radius=radius,
         verbose=False,
         n_random_starts=10,
-        init_strategy='multi',
+        init_strategy='mixed_multistart',
     )
 
     # IVP optimization (multistart) с вектором
@@ -1979,7 +1898,7 @@ def main():
         radius=radius,
         verbose=False,
         n_random_starts=10,
-        init_strategy='multi',
+        init_strategy='mixed_multistart',
     )
 
     # Floquet с вектором (v_proj)
@@ -1992,19 +1911,16 @@ def main():
     )
 
     print()
-    print()
-    print()
     print("=== Comparison: Ellipsoid-Based Deviation Estimates ===")
+    print()
     print(f"orbit={orbit_type} #{orbit_num}, derorder={derorder}, radius={radius}")
     print(f"sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
     print()
     print(f"1) sampling (ellipsoid): {du2km(dev_sampling_val):.6f} km")
     print(f"2) linear ellipsoid (semi-analytic formula): {du2km(dev_linear_val):.6f} km")
-    print(f"3) DA optimization (1 linear ic): {du2km(dev_opt_ell_lin):.6f} km")
-    print(f"4) DA optimization (multistart): {du2km(dev_da_val):.6f} km")
-    print(f"5) IVP optimization (1 linear ic): {du2km(dev_opt_ell_int_lin):.6f} km")
-    print(f"6) IVP optimization (multistart): {du2km(dev_ivp_val):.6f} km")
-    print(f"7) Floquet (monodromy eigen): {du2km(dev_floq_val):.6f} km")
+    print(f"3) DA optimization (multistart): {du2km(dev_da_val):.6f} km")
+    print(f"4) IVP optimization (multistart): {du2km(dev_ivp_val):.6f} km")
+    print(f"5) Floquet (monodromy eigen): {du2km(dev_floq_val):.6f} km")
     print()
 
     vecs_map = {
