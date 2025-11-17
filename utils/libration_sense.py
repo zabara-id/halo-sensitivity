@@ -8,7 +8,9 @@ from typing import Callable
 from scipy.optimize import minimize
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (ensures 3D projection is registered)
+from mpl_toolkits.mplot3d import Axes3D
+
+from subfunctions import plot_ellipsoid_and_vectors_pretty
 
 
 ORBIT_TYPES_NUMS = {'L1' : 251,
@@ -1078,12 +1080,12 @@ def get_maxdev_floquet_ellipsoid(
     if np.iscomplexobj(v):
         v = np.real(v)
 
-    print()
-    print("!!!")
-    print("MAX_MUL = ", MAX_MUL)
-    print("LAM = ", lam)
-    print("FOUND EIG VEC = ", v)
-    print()
+    # print()
+    # print("!!!")
+    # print("MAX_MUL = ", MAX_MUL)
+    # print("LAM = ", lam)
+    # print("FOUND EIG VEC = ", v)
+    # print()
 
     # 2) Проекция на границу эллипсоида в whitened‑норме
     d = np.array([std_pos, std_pos, std_pos, std_vel, std_vel, std_vel], dtype=float)
@@ -1289,7 +1291,7 @@ def get_maxdev_optimization_ellipsoid(
     radius: float = 3.0,
     verbose: bool = False,
     n_random_starts: int = 6,
-    init_strategy: str = 'multi',  # 'multi' | 'linear'
+    init_strategy: str = 'mixed_multistart',  # 'multi' | 'linear' | 'mixed_multistart'
 ) -> float:
     """
     Максимизация ||F(x)|| при эллипсоидальном ограничении на начальное возмущение x.
@@ -1310,8 +1312,8 @@ def get_maxdev_optimization_ellipsoid(
       - std_vel (float): Стандартное отклонение по скоростям в VU (безразмерные ед.).
       - radius (float): Радиус эллипсоида в whitened‑пространстве (число σ). По умолчанию 3.0.
       - verbose (bool): Если True — печатает диагностику найденного максимума.
-      - n_random_starts (int): Количество ДОПОЛНИТЕЛЬНЫХ случайных стартов в режиме
-          init_strategy='multi'. Помимо случайных стартов всегда добавляются
+      - n_random_starts (int): Количество ДОПОЛНИТЕЛЬНЫХ случайных стартов в режимах
+          init_strategy='multi' и init_strategy='mixed_multistart'. Помимо случайных стартов всегда добавляются
           детерминированные начальные точки: нулевая, а также ±radius вдоль
           каждой оси (итого 13 точек без учёта случайных). Случайные старты
           равномерно распределены по сфере ||u||=radius в whitened‑пространстве
@@ -1322,7 +1324,9 @@ def get_maxdev_optimization_ellipsoid(
           время вычислений.
       - init_strategy (str): 'multi' — мультистарт (ноль, базисы, случайные на сфере);
                               'linear' — один старт из линейной оценки (правый сингулярный вектор A_pos D,
-                              умноженный на radius).
+                              умноженный на radius);
+                              'mixed_multistart' — мультистарт как в 'multi' плюс дополнительный старт
+                              из линейной оценки.
 
     Возвращает:
       - float: Максимальная норма отклонения позиции через период (в DU).
@@ -1378,6 +1382,12 @@ def get_maxdev_optimization_ellipsoid(
                 u = np.zeros(6)
             inits.append(u)
 
+        if init_strategy == 'mixed_multistart':
+            # Добавляем линейный старт к стандартному мультистарту
+            v_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+            u0 = float(radius) * v_hat
+            inits.append(u0)
+
     best_val = -np.inf
     best_u: np.ndarray | None = None
 
@@ -1420,7 +1430,7 @@ def get_maxdev_optimization_ellipsoid_with_vector(
     radius: float = 3.0,
     verbose: bool = False,
     n_random_starts: int = 6,
-    init_strategy: str = 'multi',  # 'multi' | 'linear'
+    init_strategy: str = 'mixed_multistart',  # 'multi' | 'linear' | 'mixed_multistart'
 ) -> tuple[float, np.ndarray]:
     """
     Вариант get_maxdev_optimization_ellipsoid, возвращающий и максимальное значение,
@@ -1466,6 +1476,10 @@ def get_maxdev_optimization_ellipsoid_with_vector(
             u = (radius * u / nu) if nu > 1e-12 else np.zeros(6)
             inits.append(u)
 
+        if init_strategy == 'mixed_multistart':
+            v_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+            inits.append(float(radius) * v_hat)
+
     best_val = -np.inf
     best_u: np.ndarray | None = None
 
@@ -1505,7 +1519,7 @@ def get_maxdev_optimization_ellipsoid_integrate(
     radius: float = 3.0,
     verbose: bool = False,
     n_random_starts: int = 6,
-    init_strategy: str = 'multi',  # 'multi' | 'linear'
+    init_strategy: str = 'mixed_multistart',  # 'multi' | 'linear' | 'mixed_multistart'
 ) -> float:
     """
     Максимизация ||F(x)|| на эллипсоиде неопределенности с «честной» интеграцией.
@@ -1529,8 +1543,8 @@ def get_maxdev_optimization_ellipsoid_integrate(
       - std_vel (float): Стандартное отклонение по скоростям в VU (безразмерные ед.).
       - radius (float): Радиус эллипсоида в whitened-пространстве. По умолчанию 3.0.
       - verbose (bool): Если True — печатает диагностику найденного максимума.
-      - n_random_starts (int): Количество ДОПОЛНИТЕЛЬНЫХ случайных стартов в режиме
-          init_strategy='multi'. Помимо случайных стартов всегда добавляются
+      - n_random_starts (int): Количество ДОПОЛНИТЕЛЬНЫХ случайных стартов в режимах
+          init_strategy='multi' и init_strategy='mixed_multistart'. Помимо случайных стартов всегда добавляются
           детерминированные начальные точки: нулевая, а также ±radius вдоль
           каждой оси (итого 13 точек без учёта случайных). Случайные старты
           равномерно распределены по сфере ||u||=radius в whitened-пространстве
@@ -1538,7 +1552,9 @@ def get_maxdev_optimization_ellipsoid_integrate(
           seed=2025 для воспроизводимости. Установите 0, чтобы отключить случайные
           старты. Параметр игнорируется при init_strategy='linear'. Ввиду высокой
           стоимости интегрирования рекомендуется 0 или небольшие значения.
-      - init_strategy (str): 'multi' — мультистарт; 'linear' — один старт из линейной оценки.
+      - init_strategy (str): 'multi' — мультистарт;
+                             'linear' — один старт из линейной оценки;
+                             'mixed_multistart' — мультистарт + один старт из линейной оценки.
 
     Возвращает:
       - float: Максимальная норма отклонения позиции через период (в DU).
@@ -1604,6 +1620,11 @@ def get_maxdev_optimization_ellipsoid_integrate(
                 u = np.zeros(6)
             inits.append(u)
 
+        if init_strategy == 'mixed_multistart':
+            v_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+            u0 = float(radius) * v_hat
+            inits.append(u0)
+
     best_val = -np.inf
     best_u: np.ndarray | None = None
 
@@ -1659,7 +1680,7 @@ def get_maxdev_optimization_ellipsoid_integrate_with_vector(
     radius: float = 3.0,
     verbose: bool = False,
     n_random_starts: int = 6,
-    init_strategy: str = 'multi',
+    init_strategy: str = 'mixed_multistart',
 ) -> tuple[float, np.ndarray]:
     """
     Как get_maxdev_optimization_ellipsoid_integrate, но возвращает и 6D-вектор x,
@@ -1701,6 +1722,10 @@ def get_maxdev_optimization_ellipsoid_integrate_with_vector(
             u = rng.normal(0.0, 1.0, 6)
             nu = np.linalg.norm(u)
             inits.append((radius * u / nu) if nu > 1e-12 else np.zeros(6))
+
+        if init_strategy == 'mixed_multistart':
+            v_hat = get_maxdev_linear_ellipsoid_argmax_vector(xf, std_pos, std_vel)
+            inits.append(float(radius) * v_hat)
 
     best_val = -np.inf
     best_u: np.ndarray | None = None
@@ -1815,7 +1840,7 @@ def main():
     Печатает значения в DU и км для наглядного сравнения.
     """
     # Конфигурация эксперимента
-    orbit_type, orbit_num = "L1", 194
+    orbit_type, orbit_num = "L1", 10
     std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
     radius = 4.0
     derorder = 3
@@ -1990,115 +2015,11 @@ def main():
         'Floquet': vec_floq,
     }
 
-    # _plot_ellipsoid_and_vectors(
-    #     pos_sigma=std_pos,
-    #     r=radius,
-    #     vecs=vecs_map,
-    #     title=f"Initial position ellipsoid (radius={radius}·σ_pos) and argmax vectors",
-    # )
-
-    _plot_ellipsoid_and_vectors_pretty(
+    plot_ellipsoid_and_vectors_pretty(
         pos_sigma=std_pos,
         r=radius,
         vecs=vecs_map
     )
-
-
-def _plot_ellipsoid_and_vectors_pretty(
-    pos_sigma: float,
-    r: float,
-    vecs: dict[str, np.ndarray],
-    title: str | None = None,
-) -> None:
-    """
-    Более выразительная визуализация эллипсоида и 3D‑векторов на Matplotlib.
-
-    Особенности (только MPL):
-    - Стрелки‑векторы (`quiver`) и аккуратная легенда (без надписей у концов).
-    - Очень лёгкая полупрозрачная поверхность эллипсоида + тонкая проволочная сетка,
-      чтобы не перекрывать содержимое внутри.
-    - Равный масштаб осей и вспомогательные оси‑стрелки.
-
-    Параметры такие же, как у старой функции. `vecs` — словарь имя → 6D‑вектор;
-    используются только первые 3 компоненты (dx, dy, dz).
-    """
-    a = b = c = r * pos_sigma
-
-    # Параметризация сферы (a=b=c), чтобы остаться совместимыми с текущей логикой
-    u = np.linspace(0, 2 * np.pi, 100)
-    v = np.linspace(0, np.pi, 50)
-    X = a * np.outer(np.cos(u), np.sin(v))
-    Y = b * np.outer(np.sin(u), np.sin(v))
-    Z = c * np.outer(np.ones_like(u), np.cos(v))
-
-    # --- Matplotlib implementation (enhanced static) ---
-    from matplotlib.lines import Line2D
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Очень лёгкая поверхность (почти невидимая), чтобы не перекрывать векторы
-    ax.plot_surface(X, Y, Z, color=(0.8, 0.8, 0.8, 0.10), linewidth=0, antialiased=True, shade=False)
-    # Тонкая проволочная сетка для ориентира
-    ax.plot_wireframe(X, Y, Z, rstride=6, cstride=6, color=(0, 0, 0, 0.05), linewidth=0.5)
-
-    # Цвета как в исходном коде
-    color_cycle = {
-        'sampling': 'tab:blue',
-        'linear ellipsoid': 'tab:orange',
-        'DA opt (multistart)': 'tab:green',
-        'IVP opt (multistart)': 'tab:red',
-        'Floquet': 'tab:purple',
-    }
-    # Подписи легенды на русском
-    ru_labels = {
-        'sampling': 'семплинг (эллипсоид)',
-        'linear ellipsoid': 'линейный эллипсоид',
-        'DA opt (multistart)': 'ДА‑опт (мультистарт)',
-        'IVP opt (multistart)': 'ОДУ‑опт (мультистарт)',
-        'Floquet': 'Флоке',
-    }
-    palette_fallback = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:cyan']
-
-    # Стрелки‑векторы с подписями в концах
-    proxies: list[Line2D] = []
-    for idx, (name, vec6) in enumerate(vecs.items()):
-        p = np.asarray(vec6[:3], dtype=float)
-        color = color_cycle.get(name, palette_fallback[idx % len(palette_fallback)])
-        ax.quiver(
-            0.0, 0.0, 0.0,
-            p[0], p[1], p[2],
-            arrow_length_ratio=0.12,
-            color=color,
-            linewidth=1.1,
-            normalize=False,
-        )
-        proxies.append(Line2D([0], [0], color=color, lw=3, label=ru_labels.get(name, name)))
-
-    # Оси‑стрелки для ориентира
-    lim = r * pos_sigma
-    axis_len = lim
-    ax.quiver(0, 0, 0, axis_len, 0, 0, color='gray', arrow_length_ratio=0.02, alpha=0.5, linewidth=0.5)
-    ax.quiver(0, 0, 0, 0, axis_len, 0, color='gray', arrow_length_ratio=0.02, alpha=0.5, linewidth=0.5)
-    ax.quiver(0, 0, 0, 0, 0, axis_len, color='gray', arrow_length_ratio=0.02, alpha=0.5, linewidth=0.5)
-    ax.text(axis_len, 0, 0, 'x', color='gray')
-    ax.text(0, axis_len, 0, 'y', color='gray')
-    ax.text(0, 0, axis_len, 'z', color='gray')
-
-    # Оформление
-    ax.set_xlim([-lim, lim])
-    ax.set_ylim([-lim, lim])
-    ax.set_zlim([-lim, lim])
-    ax.set_xlabel('dx (DU)')
-    ax.set_ylabel('dy (DU)')
-    ax.set_zlabel('dz (DU)')
-    if title:
-        ax.set_title(title)
-    ax.set_box_aspect([1, 1, 1])
-    ax.view_init(elev=22, azim=35)
-    ax.legend(handles=proxies, loc='upper left', frameon=False)
-    plt.tight_layout()
-    plt.show()
 
 
 def main_check_predictions():
