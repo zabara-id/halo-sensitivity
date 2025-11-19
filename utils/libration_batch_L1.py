@@ -22,9 +22,9 @@ ORBIT_TYPE = "L1"
 NUM_ORBITS = ORBIT_TYPES_NUMS[ORBIT_TYPE]
 
 # Параметры эксперимента — такие же, как в main() в libration_sense.py
-STD_POS_DU = km2du(2.0)          # 2 км по положению
-STD_VEL_VU = kmS2vu(0.02e-3)     # 0.02 м/с по скорости
-RADIUS = 4.0
+STD_POS_DU = km2du(3.0)          # 3 км по положению
+STD_VEL_VU = kmS2vu(0.03e-3)     # 0.03 м/с по скорости
+RADIUS = 3.0
 DERORDER = 3
 N_SAMPLES = 100_000
 N_RANDOM_STARTS = 10
