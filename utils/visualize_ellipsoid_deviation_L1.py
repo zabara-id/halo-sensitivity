@@ -1,21 +1,26 @@
-import os
+import argparse
 import csv
-from typing import Tuple, List
+import os
+from typing import List, Tuple
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
-def _load_ellipsoid_data() -> Tuple[np.ndarray, ...]:
+def _csv_path(project_root: str, orbit_type: str) -> str:
+    return os.path.join(project_root, "data", "output", f"ellipsoid_deviation_{orbit_type}__.csv")
+
+
+def _load_ellipsoid_data(orbit_type: str) -> Tuple[np.ndarray, ...]:
     """
-    Загружает данные из data/output/ellipsoid_deviation_L1.csv.
+    Загружает данные из data/output/ellipsoid_deviation_<orbit>.csv.
 
     Возвращает:
         (orbit_nums, max_mul, sampling_km, linear_km, da_km, ivp_km, floquet_km)
         все в виде numpy-массивов, отсортированных по номеру орбиты.
     """
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    csv_path = os.path.join(project_root, "data", "output", "ellipsoid_deviation_L1.csv")
+    csv_path = _csv_path(project_root, orbit_type)
 
     orbit_nums: List[int] = []
     max_mul: List[float] = []
@@ -57,7 +62,7 @@ def _load_ellipsoid_data() -> Tuple[np.ndarray, ...]:
     )
 
 
-def plot_ellipsoid_deviation_L1() -> None:
+def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
     """
     Строит составной график:
       - верхняя панель: абсолютные отклонения (км) 5 методов vs номер орбиты;
@@ -67,6 +72,7 @@ def plot_ellipsoid_deviation_L1() -> None:
     Так видно и абсолютные значения, и относительные ошибки методов
     относительно «эталонного» IVP, и поведение MAX_MUL без общей шкалы.
     """
+    orbit_type = orbit_type.upper()
     (
         orbit_nums,
         max_mul,
@@ -75,7 +81,7 @@ def plot_ellipsoid_deviation_L1() -> None:
         da_opt,
         ivp_opt,
         floquet,
-    ) = _load_ellipsoid_data()
+    ) = _load_ellipsoid_data(orbit_type)
 
     fig, (ax_abs, ax_ratio, ax_mul) = plt.subplots(
         3,
@@ -181,7 +187,7 @@ def plot_ellipsoid_deviation_L1() -> None:
         linewidth=1.3,
         linestyle="-.",
     )
-    ax_mul.set_xlabel("Номер гало-орбиты L1", fontsize=11)
+    ax_mul.set_xlabel(f"Номер гало-орбиты {orbit_type}", fontsize=11)
     ax_mul.set_ylabel("MAX_MUL\n(мультипликатор Флоке)", fontsize=11)
     ax_mul.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
     ax_mul.legend(loc="upper right", fontsize=9, framealpha=0.9)
@@ -190,7 +196,7 @@ def plot_ellipsoid_deviation_L1() -> None:
     ax_mul.set_xlim(orbit_nums.min(), orbit_nums.max())
 
     fig.suptitle(
-        "Отклонения на эллипсоиде неопределённости для семейства L1\n"
+        f"Отклонения на эллипсоиде неопределённости для семейства {orbit_type}\n"
         "Абсолютные значения, относительные ошибки и MAX_MUL",
         fontsize=13,
     )
@@ -199,8 +205,24 @@ def plot_ellipsoid_deviation_L1() -> None:
     plt.show()
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Plot ellipsoid deviation metrics for L1/L2 halo orbits.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "-t",
+        "--orbit-type",
+        choices=["L1", "L2"],
+        default="L1",
+        help="Halo family to visualize",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    plot_ellipsoid_deviation_L1()
+    args = _parse_args()
+    plot_ellipsoid_deviation(args.orbit_type)
 
 
 if __name__ == "__main__":
