@@ -1,11 +1,13 @@
 """
-Аппроксимация Alpha1/Alpha2 для L2 теми же сигмоидами, что использованы для L1,
-и построение графика без сплайнов (точки + наши кривые + d_max справа).
+Аппроксимация Alpha1/Alpha2 для L2 с гибридом
+    baseline (квадратик) + общая логистика,
+чтобы дать лёгкий загиб слева, который виден в данных.
+График без сплайнов: точки + наши кривые + d_max справа.
 
-f(x) = lower + (upper - lower) / (1 + exp(k * (x - x_mid)))
+f(T) = p0 + p1*T + p2*T^2 + A / (1 + exp(k * (T - T_mid)))^(1/nu)
 
-* x — период T в днях.
-* k > 0 даёт убывание (Alpha2), k < 0 — возрастание (Alpha1).
+* T — период в днях.
+* A, k, T_mid, nu управляют хвостом справа; p0..p2 задают мягкий наклон/кривизну слева.
 Запуск: python3 utils/fit_alpha_param_L2.py
 """
 
@@ -26,9 +28,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA = REPO_ROOT / "data" / "output" / "coefficients" / "koefficients_data_L2.csv"
 
 
-def logistic4(x: np.ndarray, lower: float, upper: float, k: float, x_mid: float) -> np.ndarray:
-    """Четырехпараметрическая сигмоида с независимыми асимптотами."""
-    return lower + (upper - lower) / (1.0 + np.exp(k * (x - x_mid)))
+def quad_logistic(
+    x: np.ndarray,
+    p0: float,
+    p1: float,
+    p2: float,
+    A: float,
+    k: float,
+    x_mid: float,
+    nu: float,
+) -> np.ndarray:
+    """Базовый квадратик + асимметричная логистика для сурового хвоста справа."""
+    baseline = p0 + p1 * x + p2 * x * x
+    logistic = A / (1.0 + np.exp(k * (x - x_mid))) ** (1.0 / nu)
+    return baseline + logistic
 
 
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -53,55 +66,81 @@ def load_alpha_data(path: Path = DEFAULT_DATA) -> Tuple[np.ndarray, np.ndarray, 
 @dataclass
 class FitResult:
     label: str
-    lower: float
-    upper: float
+    p0: float
+    p1: float
+    p2: float
+    A: float
     k: float
     x_mid: float
+    nu: float
     r2: float
 
     def predict(self, x: np.ndarray) -> np.ndarray:
-        return logistic4(x, self.lower, self.upper, self.k, self.x_mid)
+        return quad_logistic(x, self.p0, self.p1, self.p2, self.A, self.k, self.x_mid, self.nu)
 
 
 def fit_alpha_curve(x: np.ndarray, y: np.ndarray, label: str) -> FitResult:
-    """Подбирает сигмоиду; bounds мягкие для устойчивости."""
-    lower_guess = float(np.quantile(y, 0.05))
-    upper_guess = float(np.quantile(y, 0.95))
+    """Подбирает квадратический baseline + логистику; bounds мягкие для устойчивости."""
+    y_min = float(np.quantile(y, 0.05))
+    y_max = float(np.quantile(y, 0.95))
     span = float(x.max() - x.min())
-    p0 = (lower_guess, upper_guess, 0.5, float(np.median(x)))
+    p0_guess = float(np.median(y))
+    p1_guess = 0.0
+    p2_guess = 0.0
+    A_guess = float(y_max - y_min)
+    p0_tuple = (p0_guess, p1_guess, p2_guess, A_guess, 0.5, float(np.median(x)), 1.0)
     bounds = (
-        (lower_guess - 0.2, lower_guess, -5.0, x.min() - 0.2 * span),
-        (upper_guess, upper_guess + 0.2, 5.0, x.max() + 0.2 * span),
+        # p0, p1, p2, A, k, x_mid, nu
+        (
+            y_min - 0.2,
+            -1.0,
+            -0.1,
+            -2.0,  # A может быть отриц. для растущей/убывающей сигмоиды
+            -5.0,
+            x.min() - 0.2 * span,
+            0.2,
+        ),
+        (
+            y_max + 0.2,
+            1.0,
+            0.1,
+            2.0,
+            5.0,
+            x.max() + 0.2 * span,
+            5.0,
+        ),
     )
     try:
         params, _ = curve_fit(
-            logistic4,
+            quad_logistic,
             x,
             y,
-            p0=p0,
+            p0=p0_tuple,
             bounds=bounds,
             maxfev=20000,
         )
     except Exception:
-        params, _ = curve_fit(logistic4, x, y, p0=p0, maxfev=20000)
+        params, _ = curve_fit(quad_logistic, x, y, p0=p0_tuple, maxfev=20000)
 
-    y_hat = logistic4(x, *params)
+    y_hat = quad_logistic(x, *params)
     return FitResult(
         label=label,
-        lower=float(params[0]),
-        upper=float(params[1]),
-        k=float(params[2]),
-        x_mid=float(params[3]),
+        p0=float(params[0]),
+        p1=float(params[1]),
+        p2=float(params[2]),
+        A=float(params[3]),
+        k=float(params[4]),
+        x_mid=float(params[5]),
+        nu=float(params[6]),
         r2=float(r2_score(y, y_hat)),
     )
 
 
 def print_result(result: FitResult) -> None:
     direction = "убывающая" if result.k > 0 else "возрастающая"
-    amplitude = result.upper - result.lower
     formula = (
-        f"{result.label}(T) = {result.lower:.5f} "
-        f"+ ({amplitude:.5f}) / (1 + exp({result.k:.5f} * (T - {result.x_mid:.3f})))"
+        f"{result.label}(T) = ({result.p0:.5f}) + ({result.p1:.5f})*T + ({result.p2:.5f})*T^2 "
+        f"+ ({result.A:.5f}) / (1 + exp({result.k:.5f} * (T - {result.x_mid:.3f})))^(1/{result.nu:.3f})"
     )
     print(f"{result.label}: {direction} сигмоида, R^2 = {result.r2:.4f}")
     print(f"    {formula}")
@@ -125,7 +164,7 @@ def plot_with_dev(
     ax1.scatter(t, alpha2, color="green", s=20, alpha=0.6, label="Alpha2")
 
     # Сигмоидальные аппроксимации
-    t_dense = np.linspace(t.min(), t.max(), 800)
+    t_dense = np.linspace(t.min(), t.max(), 1000)
     line1, = ax1.plot(
         t_dense,
         fit1.predict(t_dense),
@@ -178,7 +217,7 @@ def run_fit_and_plot() -> None:
     fit1 = fit_alpha_curve(t, alpha1, "Alpha1")
     fit2 = fit_alpha_curve(t, alpha2, "Alpha2")
 
-    print("Параметризация: f(T) = lower + (upper - lower) / (1 + exp(k * (T - T_mid)))")
+    print("Параметризация: f(T) = p0 + p1*T + p2*T^2 + A / (1 + exp(k*(T - T_mid)))^(1/nu)")
     print_result(fit1)
     print_result(fit2)
 
