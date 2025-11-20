@@ -24,10 +24,10 @@ class HaloOrbitSensitivityProcessor:
         self._num = num
 
     @property
-    def type(self):
+    def type(self) -> str:
         return self._type
     
     @property
-    def num(self):
+    def num(self) -> int:
         return self._num
     
