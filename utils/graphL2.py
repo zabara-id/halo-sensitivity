@@ -5,12 +5,11 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 from utils.libration_sense import du2km, tu2days
 
-file_path = "../data/output/coefficients_wide/L2.csv"
+file_path = "../data/output/coefficients/koefficients_data_L2.csv"
 
 df = pd.read_csv(file_path)
 
 df.sort_values('T', inplace=True)
-# Извлекаем столбцы в виде NumPy-массивов
 T_array = tu2days(df['T'].values)
 alpha1 = df['Alpha1'].values
 alpha2 = df['Alpha2'].values
