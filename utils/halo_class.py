@@ -2,7 +2,7 @@ from libration_sense import get_xf, km2du, kmS2vu, du2km, get_maxdev_sampling_no
 from formula_creators import n_finder, alpha_finder_of_n
 
 
-class HaloOrbitProcessor:
+class HaloOrbitSensitivityProcessor:
 
     STD_POS_DEFAULT: float = 1                              # Стандартное отклонение по положению по умолчанию [км]
     STD_VEL_DEFAULT: float = 0.01e-3                        # Стандартное отклонение по скорости по умолчанию [см / с]
