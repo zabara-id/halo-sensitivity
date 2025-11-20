@@ -7,7 +7,7 @@ from utils.libration_sense import du2km
 
 
 # file_path = "data/output/coefficients/koefficients_data_L1.csv"
-file_path = "data/output/coefs_final/L1_wide_range.csv"
+file_path = "../data/output/coefficients_wide/L1.csv"
 print(file_path)
 df = pd.read_csv(file_path)
 
