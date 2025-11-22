@@ -128,25 +128,25 @@ def n_finder(
         #     seed=None if reuse_noise else seed,
         # )
 
-        y_du[index] = get_maxdev_sampling_ellipsoid(
-            orbit_type,
-            number_of_orbit,
-            xf,
-            std_pos,
-            std_vel,
-            amount_of_points=amount_of_points,
-            unit_deltas=unit_deltas,
-            seed=None if reuse_noise else seed,
-            radius=4.0
-        )
-        # y_du[index] = get_maxdev_optimization_ellipsoid(
+        # y_du[index] = get_maxdev_sampling_ellipsoid(
         #     orbit_type,
         #     number_of_orbit,
         #     xf,
         #     std_pos,
         #     std_vel,
+        #     amount_of_points=amount_of_points,
+        #     unit_deltas=unit_deltas,
+        #     seed=None if reuse_noise else seed,
         #     radius=4.0
         # )
+        y_du[index] = get_maxdev_optimization_ellipsoid(
+            orbit_type,
+            number_of_orbit,
+            xf,
+            std_pos,
+            std_vel,
+            radius=3.0
+        )
         index += 1
 
     y_normed = y_du / np.max(y_du)

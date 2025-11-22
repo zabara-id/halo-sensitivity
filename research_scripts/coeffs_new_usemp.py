@@ -11,14 +11,14 @@ from utils.formula_creators import (
    alpha_finder_of_n, n_finder
 )
 
-ORBIT_TYPE = "L2"
-ORBIT_MIN, ORBIT_MAX = 1, 583
+ORBIT_TYPE = "L1"
+ORBIT_MIN, ORBIT_MAX = 1, 251
 GRID_DENSITY = 11
 SEED = None
 REUSE_NOISE = True
 AMOUNT_OF_POINTS = 11_000
 
-OUTPATH = "data/output/coefs_final/L2_wide_range_ell.csv"
+OUTPATH = "data/output/L1_test.csv"
 HEADER = ["Orbit Number", "T", "Alpha1", "Alpha2", "n", "Deviation Max"]
 
 

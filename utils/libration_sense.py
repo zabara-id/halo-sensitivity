@@ -10,7 +10,7 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from subfunctions import plot_ellipsoid_and_vectors_pretty
+from .subfunctions import plot_ellipsoid_and_vectors_pretty
 
 
 ORBIT_TYPES_NUMS = {'L1' : 251,
