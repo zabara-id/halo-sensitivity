@@ -10,7 +10,7 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from .subfunctions import plot_ellipsoid_and_vectors_pretty
+from subfunctions import plot_ellipsoid_and_vectors_pretty
 
 
 ORBIT_TYPES_NUMS = {'L1' : 251,
@@ -1840,9 +1840,9 @@ def main():
     Печатает значения в DU и км для наглядного сравнения.
     """
     # Конфигурация эксперимента
-    orbit_type, orbit_num = "L1", 11
-    std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
-    radius = 4.0
+    orbit_type, orbit_num = "L2", 345
+    std_pos, std_vel = km2du(3.), kmS2vu(0.03e-3)
+    radius = 3.0
     derorder = 3
 
     # DA‑карта через период (для методов 1–3)
@@ -1931,17 +1931,59 @@ def main():
         'Floquet': vec_floq,
     }
 
+    # Векторы в скоростном пространстве (последние 3 компоненты)
+    vecs_vel = {name: np.asarray(vec)[3:] for name, vec in vecs_map.items()}
+
+    # Совмещённый рисунок: слева — координатные отклонения, справа — скоростные
+    fig = plt.figure(figsize=(12, 6))
+    ax_pos = fig.add_subplot(121, projection='3d')
+    ax_vel = fig.add_subplot(122, projection='3d')
+
     plot_ellipsoid_and_vectors_pretty(
         pos_sigma=std_pos,
         r=radius,
-        vecs=vecs_map
+        vecs=vecs_map,
+        ax=ax_pos,
+        show=False,
+        legend_kwargs={
+            'loc': 'upper center',
+            'bbox_to_anchor': (0.5, 1.08),
+            'ncol': 2,
+            'borderaxespad': 0.2,
+        },
     )
+    velocity_labels = {
+        'sampling': r'$\delta\mathbf{v}_0^*$, sampling',
+        'linear ellipsoid': r'$\delta\mathbf{v}_0^*$, linear + SVD',
+        'DA opt (multistart)': r'$\delta\mathbf{v}_0^*$, DA-optimization',
+        'IVP opt (multistart)': r'$\delta\mathbf{v}_0^*$, IVP-optimization',
+        'Floquet': r'$\delta\mathbf{v}_0^*$, Floquet'
+    }
+    plot_ellipsoid_and_vectors_pretty(
+        pos_sigma=std_vel,
+        r=radius,
+        vecs=vecs_vel,
+        ax=ax_vel,
+        show=False,
+        axis_labels=(r'$\delta v_x$', r'$\delta v_y$', r'$\delta v_z$'),
+        units_label="VU",
+        legend_labels=velocity_labels,
+        legend_kwargs={
+            'loc': 'upper center',
+            'bbox_to_anchor': (0.5, 1.08),
+            'ncol': 2,
+            'borderaxespad': 0.2,
+        },
+    )
+
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    plt.show()
 
 
 def main_check_predictions():
     orbit_type, orbit_num = "L1", 10
     std_pos, std_vel = km2du(2.), kmS2vu(0.02e-3)
-    radius = 4.0
+    radius = 3.0
     derorder = 3
 
     # DA‑карта через период (для методов 1–3)
@@ -1959,7 +2001,7 @@ def main_check_predictions():
         std_pos,
         std_vel,
         derorder=derorder,
-        amount_of_points=100_000,
+        amount_of_points=10_000,
         radius=radius,
     )
 
@@ -1969,8 +2011,6 @@ def main_check_predictions():
         std_vel,
         radius=radius,
     )
-    vec_linear *= 1
-
 
     dev_da_val, vec_da = get_maxdev_optimization_ellipsoid_with_vector(
         orbit_type,
@@ -2111,12 +2151,12 @@ def main_check_predictions():
     print(f"sigmas: pos={du2km(std_pos):.3f} km, vel={vu2ms(std_vel):.6f} m/s")
     print()
     # Центральная
-    cen_du = results["central"]["final_diff_norm_du"]  # type: ignore[index]
-    print(f"central: diff={du2km(cen_du):.6f} km (should be ~0)")
+    cen_du = results["central"]["final_diff_norm_du"]
+    print(f"central: diff={du2km(cen_du):.6f} km (should be about 0)")
 
     for name, _, _ in methods:
-        diff_du = results[name]["final_diff_norm_du"]  # type: ignore[index]
-        pred_du = results[name]["pred_dev_du"]  # type: ignore[index]
+        diff_du = results[name]["final_diff_norm_du"]
+        pred_du = results[name]["pred_dev_du"]
         print(f"{name}: predicted={du2km(float(pred_du)):.6f} km, integrated={du2km(float(diff_du)):.6f} km")
 
 
