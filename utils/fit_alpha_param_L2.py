@@ -170,14 +170,14 @@ def plot_with_dev(
         fit1.predict(t_dense),
         color="blue",
         linewidth=2.5,
-        label=f"alpha1 fit (R2={fit1.r2:.3f})",
+        label=r"$\alpha_1$ fit",
     )
     line2, = ax1.plot(
         t_dense,
         fit2.predict(t_dense),
         color="green",
         linewidth=2.5,
-        label=f"alpha2 fit (R2={fit2.r2:.3f})",
+        label=r"$\alpha_2$ fit",
     )
 
     ax1.set_xlabel(r"T [дни]", fontsize=16)

@@ -35,6 +35,11 @@ def logistic4(z: np.ndarray, lower: float, upper: float, k: float, z_mid: float)
     return lower + (upper - lower) / (1.0 + np.exp(k * (z - z_mid)))
 
 
+def stretched_exp(z: np.ndarray, amplitude: float, tau: float, power: float, offset: float) -> np.ndarray:
+    """Сдвинутая растянутая экспонента для d_max: offset + A * exp(-(z/tau)^p)."""
+    return offset + amplitude * np.exp(-np.power(z / tau, power))
+
+
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Коэффициент детерминации R^2."""
     ss_res = np.sum((y_true - y_pred) ** 2)
@@ -67,6 +72,19 @@ class FitResult:
 
     def predict(self, z: np.ndarray) -> np.ndarray:
         return logistic4(z, self.lower, self.upper, self.k, self.z_mid)
+
+
+@dataclass
+class DMaxFitResult:
+    label: str
+    amplitude: float
+    tau: float
+    power: float
+    offset: float
+    r2: float
+
+    def predict(self, z: np.ndarray) -> np.ndarray:
+        return stretched_exp(z, self.amplitude, self.tau, self.power, self.offset)
 
 
 def fit_alpha_curve(z: np.ndarray, y: np.ndarray, label: str) -> FitResult:
@@ -117,13 +135,55 @@ def print_result(result: FitResult) -> None:
     print(f"    {formula}")
 
 
+def fit_dmax_curve(z: np.ndarray, dmax: np.ndarray, label: str) -> DMaxFitResult:
+    """
+    Подбор растянутой экспоненты offset + A * exp(-(z/tau)^p).
+    Форма с показателем p > 1 даёт быстрый спад в начале и пологий хвост.
+    """
+    amplitude_guess = float(dmax.max() - dmax.min())
+    amplitude_guess = max(amplitude_guess, 1e-3)
+    offset_guess = float(np.quantile(dmax, 0.02))
+    tau_guess = max(float(np.median(z)), 1.0)
+    power_guess = 1.3  # график выглядит быстрее экспоненты, но медленнее квадрата
+    bounds = (
+        (0.0, 1.0, 0.3, offset_guess - amplitude_guess),
+        (np.inf, 200.0, 3.0, offset_guess + amplitude_guess),
+    )
+    params, _ = curve_fit(
+        stretched_exp,
+        z,
+        dmax,
+        p0=(amplitude_guess, tau_guess, power_guess, offset_guess),
+        bounds=bounds,
+        maxfev=40000,
+    )
+    y_hat = stretched_exp(z, *params)
+    return DMaxFitResult(
+        label=label,
+        amplitude=float(params[0]),
+        tau=float(params[1]),
+        power=float(params[2]),
+        offset=float(params[3]),
+        r2=float(r2_score(dmax, y_hat)),
+    )
+
+
+def print_dmax_result(result: DMaxFitResult) -> None:
+    formula = (
+        f"{result.label}(z) = {result.offset:.5f} + {result.amplitude:.5f} * exp(-(z/{result.tau:.3f})^{result.power:.3f})"
+    )
+    print(f"{result.label}: растянутая экспонента, R^2 = {result.r2:.4f}")
+    print(f"    {formula}")
+
+
 def plot_with_dev(
     z: np.ndarray,
     alpha1: np.ndarray,
     alpha2: np.ndarray,
-    dev_max: np.ndarray,
+    dev_max_thousand: np.ndarray,
     fit1: FitResult,
     fit2: FitResult,
+    fit_dev: DMaxFitResult,
 ) -> None:
     """
     Строит тот же макет, что в graphL1: точки Alpha1/Alpha2, наши сигмоиды и d_max справа.
@@ -143,14 +203,14 @@ def plot_with_dev(
         fit1.predict(z_dense),
         color="blue",
         linewidth=2.5,
-        label=f"alpha1 fit (R2={fit1.r2:.3f})",
+        label=r"$\alpha_1$ fit",
     )
     line2, = ax1.plot(
         z_dense,
         fit2.predict(z_dense),
         color="green",
         linewidth=2.5,
-        label=f"alpha2 fit (R2={fit2.r2:.3f})",
+        label=r"$\alpha_2$ fit",
     )
 
     ax1.set_xlabel(r"$z_0$ [тыс. км]", fontsize=16)
@@ -164,18 +224,25 @@ def plot_with_dev(
     ax2.spines["right"].set_color("red")
     ax2.tick_params(axis="y", colors="red")
     ax2.yaxis.label.set_color("red")
-    line3 = ax2.plot(
+    ax2.scatter(
         z,
-        du2km(dev_max) / 1000.0,
+        dev_max_thousand,
         color="red",
-        linestyle="-",
+        s=20,
+        alpha=0.7,
         marker="D",
-        markersize=4,
-        label=r"$d_{max}$",
+    )
+    line4 = ax2.plot(
+        np.linspace(z.min(), z.max(), 600),
+        fit_dev.predict(np.linspace(z.min(), z.max(), 600)),
+        color="red",
+        linewidth=2.5,
+        linestyle="-",
+        label=r"$d_{max}$ fit",
     )[0]
 
     legend1 = ax1.legend([line1, line2], [line1.get_label(), line2.get_label()], loc="center left", fontsize=14)
-    legend2 = ax1.legend([line3], [line3.get_label()], loc="right", fontsize=14)
+    legend2 = ax1.legend([line4], [line4.get_label()], loc="right", fontsize=14)
     ax1.add_artist(legend1)
 
     plt.tight_layout()
@@ -190,14 +257,18 @@ def run_fit_and_plot() -> None:
     Без аргументов из консоли.
     """
     z, alpha1, alpha2, dev_max = load_alpha_data(DEFAULT_DATA)
+    dev_max_thousand = du2km(dev_max) / 1000.0
     fit1 = fit_alpha_curve(z, alpha1, "Alpha1")
     fit2 = fit_alpha_curve(z, alpha2, "Alpha2")
+    fit_dev = fit_dmax_curve(z, dev_max_thousand, "d_max")
 
     print("Параметризация: f(z) = lower + (upper - lower) / (1 + exp(k * (z - z_mid)))")
     print_result(fit1)
     print_result(fit2)
+    print("Параметризация d_max: d(z) = offset + amplitude * exp(-rate * z)")
+    print_dmax_result(fit_dev)
 
-    plot_with_dev(z, alpha1, alpha2, dev_max, fit1, fit2)
+    plot_with_dev(z, alpha1, alpha2, dev_max_thousand, fit1, fit2, fit_dev)
 
 
 if __name__ == "__main__":

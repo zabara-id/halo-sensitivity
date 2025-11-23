@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from utils.libration_sense import du2km, tu2days
 
-file_path = "data/output/L2_linear_ellipsoid.csv"
+file_path = "data/output/coefficients/koefficients_data_L2.csv"
 
 df = pd.read_csv(file_path)
 
