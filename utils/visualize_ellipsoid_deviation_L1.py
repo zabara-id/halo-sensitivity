@@ -95,41 +95,41 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
     ax_abs.plot(
         orbit_nums,
         sampling,
-        label="sampling (ellipsoid)",
+        label=r'$d_{\max}^{\text{samp}}$',
         color="tab:blue",
         linewidth=1.3,
     )
     ax_abs.plot(
         orbit_nums,
         linear,
-        label="linear ellipsoid (semi-analytic)",
+        label=r'$d_{\max}^{\text{lin}}$',
         color="tab:orange",
         linewidth=1.3,
     )
     ax_abs.plot(
         orbit_nums,
         da_opt,
-        label="DA optimization (multistart)",
+        label=r'$d_{\max}^{\text{DA-opt}}$',
         color="tab:green",
         linewidth=1.3,
     )
     ax_abs.plot(
         orbit_nums,
         ivp_opt,
-        label="IVP optimization (multistart)",
+        label=r'$d_{\max}^{\text{IVP-opt}}$',
         color="tab:red",
         linewidth=1.8,
     )
     ax_abs.plot(
         orbit_nums,
         floquet,
-        label="Floquet (monodromy eigen)",
+        label=r'$d_{\max}^{\text{Fl}}$',
         color="tab:purple",
         linewidth=1.4,
         linestyle="--",
     )
 
-    ax_abs.set_ylabel("Максимальное отклонение, км", fontsize=11)
+    ax_abs.set_ylabel(r'$d_{\max}$ [км]', fontsize=11)
     ax_abs.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
     ax_abs.legend(loc="upper right", fontsize=9, framealpha=0.9)
 
@@ -141,39 +141,39 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
     da_rel = da_opt / denom
     floquet_rel = floquet / denom
 
-    ax_ratio.axhline(1.0, color="gray", linestyle="--", linewidth=1.0, label="IVP baseline")
+    ax_ratio.axhline(1.0, color="gray", linestyle="--", linewidth=1.0)
 
     ax_ratio.plot(
         orbit_nums,
         sampling_rel,
-        label="sampling / IVP",
+        label=r'$d_{\max}^{samp} / d_{\max}^{\text{IVP-opt}}$',
         color="tab:blue",
         linewidth=1.1,
     )
     ax_ratio.plot(
         orbit_nums,
         linear_rel,
-        label="linear / IVP",
+        label=r'$d_{\max}^{lin} / d_{\max}^{\text{IVP-opt}}$',
         color="tab:orange",
         linewidth=1.1,
     )
     ax_ratio.plot(
         orbit_nums,
         da_rel,
-        label="DA / IVP",
+        label=r'$d_{\max}^{DA-opt} / d_{\max}^{\text{IVP-opt}}$',
         color="tab:green",
         linewidth=1.1,
     )
     ax_ratio.plot(
         orbit_nums,
         floquet_rel,
-        label="Floquet / IVP",
+        label=r'$d_{\max}^{Fl} / d_{\max}^{\text{IVP-opt}}$',
         color="tab:purple",
         linewidth=1.2,
         linestyle="--",
     )
 
-    ax_ratio.set_ylabel("Отношение к IVP\n(безразмерно)", fontsize=11)
+    ax_ratio.set_ylabel(r'$d_{\max}^{method} / d_{\max}^{\text{IVP-opt}}$ [-]', fontsize=11)
     ax_ratio.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
     ax_ratio.legend(loc="upper right", fontsize=9, framealpha=0.9)
     # ax_ratio.set_yscale("log")
@@ -182,24 +182,24 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
     ax_mul.plot(
         orbit_nums,
         max_mul,
-        label="MAX_MUL (Флоке)",
         color="black",
         linewidth=1.3,
         linestyle="-.",
     )
-    ax_mul.set_xlabel(f"Номер гало-орбиты {orbit_type}", fontsize=11)
-    ax_mul.set_ylabel("MAX_MUL\n(мультипликатор Флоке)", fontsize=11)
+    ax_mul.set_xlabel(r"Порядковый номер гало-орбиты семейства $L_2$ [-]", fontsize=11)
+
+    ax_mul.set_ylabel(r'$\mu_{\max}$ [-]', fontsize=11)
     ax_mul.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
-    ax_mul.legend(loc="upper right", fontsize=9, framealpha=0.9)
+    # ax_mul.legend(loc="upper right", fontsize=9, framealpha=0.9)
     ax_mul.set_yscale('log')
 
     ax_mul.set_xlim(orbit_nums.min(), orbit_nums.max())
 
-    fig.suptitle(
-        f"Отклонения на эллипсоиде неопределённости для семейства {orbit_type}\n"
-        "Абсолютные значения, относительные ошибки и MAX_MUL",
-        fontsize=13,
-    )
+    # fig.suptitle(
+    #     f"Отклонения на эллипсоиде неопределённости для семейства {orbit_type}\n"
+    #     "Абсолютные значения, относительные ошибки и MAX_MUL",
+    #     fontsize=13,
+    # )
     fig.tight_layout(rect=[0, 0, 1, 0.94])
 
     plt.show()

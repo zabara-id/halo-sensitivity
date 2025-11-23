@@ -1840,7 +1840,7 @@ def main():
     Печатает значения в DU и км для наглядного сравнения.
     """
     # Конфигурация эксперимента
-    orbit_type, orbit_num = "L2", 345
+    orbit_type, orbit_num = "L1", 79
     std_pos, std_vel = km2du(3.), kmS2vu(0.03e-3)
     radius = 3.0
     derorder = 3
@@ -2003,14 +2003,13 @@ def main_check_predictions(
         "IVP optimization (multistart)": "tab:red",
         "Floquet (monodromy eigen)": "tab:purple",
     }
-    ru_labels = {
-        "central": "центральная",
-        "central IC": "центральные НУ",
-        "sampling (ellipsoid)": "семплинг (эллипсоид)",
-        "linear ellipsoid (semi-analytic)": "линейный эллипсоид (полуаналит.)",
-        "DA optimization (multistart)": "ДА‑оптимизация (мультистарт)",
-        "IVP optimization (multistart)": "ОДУ‑оптимизация (мультистарт)",
-        "Floquet (monodromy eigen)": "Флоке (собст. монодромии)",
+    labels = {
+        "central": "Halo-orbit",
+        "sampling (ellipsoid)": "Sampling pert. solution",
+        "linear ellipsoid (semi-analytic)": "Linear + SVD pert. solution",
+        "DA optimization (multistart)": "DA-opimization pert. solution",
+        "IVP optimization (multistart)": "IVP-opimization pert. solution",
+        "Floquet (monodromy eigen)": "Floquet pert. solution",
     }
 
     def integrate_traj(y0: np.ndarray, period: float, npts: int = 2000) -> tuple[np.ndarray, np.ndarray]:
@@ -2088,10 +2087,10 @@ def main_check_predictions(
 
         methods: list[tuple[str, np.ndarray, float]] = [
             ("sampling (ellipsoid)", vec_sampling, dev_sampling_val),
-            ("linear +ellipsoid (semi-analytic)", vec_linear, dev_linear_val),
-            ("DA-optimization ", vec_da, dev_da_val),
-            ("IVP-optimization", vec_ivp, dev_ivp_val),
-            ("Floquet", vec_floq, dev_floq_val),
+            ("linear ellipsoid (semi-analytic)", vec_linear, dev_linear_val),
+            ("DA optimization (multistart)", vec_da, dev_da_val),
+            ("IVP optimization (multistart)", vec_ivp, dev_ivp_val),
+            ("Floquet (monodromy eigen)", vec_floq, dev_floq_val),
         ]
 
         results: dict[str, dict[str, Any]] = {}
@@ -2141,12 +2140,13 @@ def main_check_predictions(
         for idx in range(len(orbit_data_list)):
             axes.append(fig.add_subplot(1, len(orbit_data_list), idx + 1, projection='3d'))
 
+    flag = 0
     for ax, orbit_data in zip(axes, orbit_data_list):
         central_ic_for_traj_build = np.asarray(orbit_data["central_ic"], dtype=float)
         results = orbit_data["results"]
 
         tr = results["central"]["traj"]
-        ax.plot(tr[:, 0], tr[:, 1], tr[:, 2], color=color_cycle["central"], label=ru_labels.get("central", "central"), linewidth=1.5, linestyle='--')
+        ax.plot(tr[:, 0], tr[:, 1], tr[:, 2], color=color_cycle["central"], label=labels.get("central", "central"), linewidth=1.5, linestyle='--')
         ax.scatter(
             central_ic_for_traj_build[0],
             central_ic_for_traj_build[1],
@@ -2154,7 +2154,6 @@ def main_check_predictions(
             color='k',
             s=30,
             marker='o',
-            label=ru_labels.get('central IC', 'central IC'),
             zorder=5,
         )
 
@@ -2165,7 +2164,7 @@ def main_check_predictions(
             plot_scale is None
             and max_mul_val < auto_scale_threshold
         ):
-            scale_for_plot = 150.
+            scale_for_plot = 140.
 
         for name in orbit_data["method_names"]:
             if scale_for_plot != 1.0:
@@ -2175,12 +2174,15 @@ def main_check_predictions(
                 trm = tr + delta * scale_for_plot
             else:
                 trm = results[name]["traj"]
-            ax.plot(trm[:, 0], trm[:, 1], trm[:, 2], color=color_cycle.get(name, None), label=ru_labels.get(name, name), linewidth=1.2)
+            ax.plot(trm[:, 0], trm[:, 1], trm[:, 2], color=color_cycle.get(name, None), label=labels.get(name, name), linewidth=1.2)
 
         ax.set_xlabel(r'$x$ [DU]')
         ax.set_ylabel(r'$y$ [DU]')
         ax.set_zlabel(r'$z$ [DU]')
-        ax.legend(loc='upper left', bbox_to_anchor=(-0.02, 1.02), ncol=1, framealpha=0.9, fontsize=9)
+        if flag == 0:
+            ax.legend(loc='upper left', bbox_to_anchor=(-0.02, 1.02), ncol=1, framealpha=0.9, fontsize=9)
+
+        flag += 1
         ax.set_box_aspect([1, 1, 1])
 
     plt.tight_layout(rect=(0, 0, 1, 0.9))
@@ -2202,4 +2204,4 @@ def main_check_predictions(
 
 
 if __name__ == "__main__":
-    main_check_predictions(("L1", 79), ("L1", 193))
+    main_check_predictions(orbit_config1=("L2", 21), orbit_config2=("L2", 345))

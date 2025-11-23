@@ -81,8 +81,8 @@ def deviation_graph(orbit_type: str,
     with DA.cache_manager():  # optional, for efficiency
         xfinal = RK78(initial_state, 0.0, number_of_turns * T, CR3BP)
 
-    std_pos_values = np.linspace(0, km2du(8), grid_density)
-    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)
+    std_pos_values = np.linspace(0, km2du(17), grid_density)
+    std_vel_values = np.linspace(0, kmS2vu(0.11e-3), grid_density)
 
     # Матрица для хранения результатов
     results = np.zeros((len(std_pos_values), len(std_vel_values)))
@@ -91,8 +91,9 @@ def deviation_graph(orbit_type: str,
     # для всех точек сетки. Это устраняет «рваность» изолиний,
     # которая возникала из‑за независимых экстремальных выборок
     # в каждой точке (мы берём максимум по выборке).
-    rng = np.random.default_rng(seed)
-    unit_deltas = rng.normal(0.0, 1.0, (number_of_points, 6))
+
+    # rng = np.random.default_rng(seed)
+    # unit_deltas = rng.normal(0.0, 1.0, (number_of_points, 6))
 
     P = len(std_pos_values)
     V = len(std_vel_values)
@@ -100,17 +101,29 @@ def deviation_graph(orbit_type: str,
         for i, std_pos in enumerate(std_pos_values):
             for j, std_vel in enumerate(std_vel_values):
                 results[i, j] = du2km(
-                    get_maxdev_sampling_no_integrate(
-                        orbit_type,
-                        number_of_orbit,
-                        xfinal,
-                        std_pos,
-                        std_vel,
-                        derorder=derorder,
-                        amount_of_points=number_of_points,
-                        unit_deltas=unit_deltas,
-                        seed=None
-                    )
+                    # get_maxdev_sampling_no_integrate(
+                    #     orbit_type,
+                    #     number_of_orbit,
+                    #     xfinal,
+                    #     std_pos,
+                    #     std_vel,
+                    #     derorder=derorder,
+                    #     amount_of_points=number_of_points,
+                    #     unit_deltas=unit_deltas,
+                    #     seed=None
+                    # )
+
+                    # get_maxdev_sampling_ellipsoid(
+                    #     orbit_type,
+                    #     number_of_orbit,
+                    #     xfinal,
+                    #     std_pos,
+                    #     std_vel,
+                    #     derorder=derorder,
+                    #     amount_of_points=number_of_points,
+                    #     unit_deltas=unit_deltas,
+                    #     seed=None
+                    # )
 
                     # get_maxdev_optimization_no_integrate(
                     #     orbit_type,
@@ -120,13 +133,22 @@ def deviation_graph(orbit_type: str,
                     #     std_vel
                     # )
 
+                    get_maxdev_linear_ellipsoid(
+                        xfinal,
+                        std_pos,
+                        std_vel,
+                        radius=3.0
+                    )
+
                     # get_maxdev_optimization_ellipsoid(
                     #     orbit_type,
                     #     number_of_orbit,
                     #     xfinal,
                     #     std_pos,
                     #     std_vel,
-                    #     radius=4.0,
+                    #     radius=3.0,
+                    #     n_random_starts=10,
+                    #     init_strategy="mixed_multistart"
                     # )
                 )
                 pbar.update(1)
@@ -169,12 +191,12 @@ def deviation_graph(orbit_type: str,
         t.set_bbox(dict(facecolor="white", edgecolor="none", alpha=0.5, pad=0.1))
 
     # 5) Оформление (как у тебя)
-    plt.xlabel(r'$\sigma_{vel}$, $[m/s]$', fontsize=14)
-    plt.ylabel(r'$\sigma_{pos}$, $[km]$', fontsize=14)
-    plt.title(
-        f"Deviation for orbit '{number_of_orbit}' around {orbit_type} with µ={np.around(MAX_MUL, 2)}, [km]",
-        fontsize=12
-    )
+    plt.xlabel(r'$\sigma_{vel}$, [м/с]', fontsize=14)
+    plt.ylabel(r'$\sigma_{pos}$, [км]', fontsize=14)
+    # plt.title(
+    #     f"Deviation for orbit '{number_of_orbit}' around {orbit_type} with µ={np.around(MAX_MUL, 2)}, [km]",
+    #     fontsize=12
+    # )
     plt.tick_params(axis='both', which='major', labelsize=12)
 
     # ВАЖНО: без colorbar — просто не вызываем plt.colorbar()
@@ -187,7 +209,7 @@ def main1():
 
 
 def main2():
-    deviation_graph('L1', 10, number_of_points=10_000, number_of_turns=1, grid_density=7)
+    deviation_graph('L1', 79, number_of_points=10_000, number_of_turns=1, grid_density=30)
 
 
 if __name__ == "__main__":

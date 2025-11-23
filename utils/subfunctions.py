@@ -52,11 +52,11 @@ def plot_ellipsoid_and_vectors_pretty(
         'Floquet': 'tab:purple',
     }
     default_labels = {
-        'sampling': r'$\delta\mathbf{x}_0^*$, sampling',
-        'linear ellipsoid': r'$\delta\mathbf{x}_0^*$, linear + SVD',
-        'DA opt (multistart)': r'$\delta\mathbf{x}_0^*$, DA-optimization',
-        'IVP opt (multistart)': r'$\delta\mathbf{x}_0^*$, IVP-optimization',
-        'Floquet': r'$\delta\mathbf{x}_0^*$, Floquet'
+        'sampling': r'$\delta\mathbf{r}_0^*$, sampling',
+        'linear ellipsoid': r'$\delta\mathbf{r}_0^*$, linear + SVD',
+        'DA opt (multistart)': r'$\delta\mathbf{r}_0^*$, DA-optimization',
+        'IVP opt (multistart)': r'$\delta\mathbf{r}_0^*$, IVP-optimization',
+        'Floquet': r'$\delta\mathbf{r}_0^*$, Floquet'
     }
     labels = legend_labels or default_labels
     palette_fallback = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:cyan']
