@@ -13,7 +13,8 @@ from utils.libration_sense import (
     kmS2vu,
     get_maxdev_sampling_no_integrate,
     get_maxdev_optimization_ellipsoid,
-    get_maxdev_sampling_ellipsoid
+    get_maxdev_sampling_ellipsoid,
+    get_maxdev_linear_ellipsoid
 )
 
 
@@ -95,8 +96,8 @@ def n_finder(
     reuse_noise: bool = True,
 ) -> float:
     
-    std_pos_values = np.linspace(0, km2du(8), grid_density)  # от 0 до 8 км
-    std_vel_values = np.linspace(0, kmS2vu(0.05e-3), grid_density)  # от 0 до 0.05 м / с
+    std_pos_values = np.linspace(0, km2du(17), grid_density)  # от 0 до 17 км
+    std_vel_values = np.linspace(0, kmS2vu(0.11e-3), grid_density)  # от 0 до 0.11 м / с
 
     # Генерируем матрицу A и вектор y
     N = grid_density**2
@@ -137,16 +138,25 @@ def n_finder(
         #     amount_of_points=amount_of_points,
         #     unit_deltas=unit_deltas,
         #     seed=None if reuse_noise else seed,
-        #     radius=4.0
+        #     radius=3.0
         # )
-        y_du[index] = get_maxdev_optimization_ellipsoid(
-            orbit_type,
-            number_of_orbit,
+
+        # y_du[index] = get_maxdev_optimization_ellipsoid(
+        #     orbit_type,
+        #     number_of_orbit,
+        #     xf,
+        #     std_pos,
+        #     std_vel,
+        #     radius=3.0
+        # )
+
+        y_du[index] = get_maxdev_linear_ellipsoid(
             xf,
             std_pos,
             std_vel,
             radius=3.0
         )
+
         index += 1
 
     y_normed = y_du / np.max(y_du)
@@ -173,7 +183,7 @@ def n_finder(
     bounds = [(0.000001, None)]
 
     # Начальное приближение
-    n_initial = 1.991
+    n_initial = 1.995
 
     # Метод сопряжённых направлений
     n_opt = minimize(loss, n_initial, method='Powell', bounds=bounds)

@@ -930,7 +930,8 @@ def get_maxdev_sampling_ellipsoid(
             deltax0 = np.random.normal(0.0, 1.0, (amount_of_points, 6)) * d
 
     # Проекция на эллипсоид: u = D^{-1} x, если ||u|| > radius, то u <- radius * u / ||u||
-    u = deltax0 / d  # whitened
+    # Безопасное деление: std_pos/std_vel могут быть нулями → соответствующие компоненты u ставим в 0
+    u = np.divide(deltax0, d, out=np.zeros_like(deltax0), where=d != 0)  # whitened
     norms = np.linalg.norm(u, axis=1)
     mask = norms > radius
     scales = np.ones_like(norms)
@@ -1010,7 +1011,8 @@ def get_maxdev_sampling_ellipsoid_with_vector(
         deltax0 = rng.normal(0.0, 1.0, (amount_of_points, 6)) * d
 
     # Проекция на эллипсоид (whitened радиальная)
-    u = deltax0 / d
+    # Безопасное деление, чтобы std_pos/std_vel = 0 не давали nan/inf
+    u = np.divide(deltax0, d, out=np.zeros_like(deltax0), where=d != 0)
     norms = np.linalg.norm(u, axis=1)
     mask = norms > radius
     scales = np.ones_like(norms)
@@ -1354,7 +1356,12 @@ def get_maxdev_optimization_ellipsoid(
     def objective_u(u: np.ndarray) -> float:
         x = d * u
         Fx = xf.eval(x)[:3] - x0_coords
-        return -float(np.dot(Fx, Fx))
+        val = float(np.dot(Fx, Fx))
+        if not np.isfinite(val):
+            # При выходе DA-полиномов из радиуса сходимости могут появиться NaN/inf.
+            # Возвращаем большую положительную «антиприбыль», чтобы SLSQP отбросил эту точку.
+            return 1e30
+        return -val
 
     # Инициализация стартовых точек по стратегии:
     inits: list[np.ndarray] = []
@@ -1399,10 +1406,24 @@ def get_maxdev_optimization_ellipsoid(
             constraints=cons,
             options={'ftol': 1e-12, 'maxiter': 500, 'disp': False},
         )
+        if not np.isfinite(res.fun):
+            continue  # численная ошибка оптимизатора, пробуем другой старт
         val = -res.fun
+        if not np.isfinite(val):
+            continue
         if val > best_val:
             best_val = float(val)
             best_u = np.array(res.x, dtype=float)
+
+    # Если все старты «упали» (best_val так и остался -inf/отрицательный),
+    # возвращаем устойчивую линейную оценку, чтобы избежать NaN/нулей на карте.
+    if not np.isfinite(best_val) or best_val < 0:
+        if not mask.any():
+            return 0.0
+        lin_val = get_maxdev_linear_ellipsoid(xf, std_pos, std_vel, radius)
+        if verbose:
+            print('[opt-ell] fallback to linear ellipsoid, val=', lin_val)
+        return lin_val
 
     best_norm = np.sqrt(max(best_val, 0.0))
 
@@ -1491,10 +1512,23 @@ def get_maxdev_optimization_ellipsoid_with_vector(
             constraints=cons,
             options={'ftol': 1e-12, 'maxiter': 500, 'disp': False},
         )
+        if not np.isfinite(res.fun):
+            continue
         val = -res.fun
+        if not np.isfinite(val):
+            continue
         if val > best_val:
             best_val = float(val)
             best_u = np.array(res.x, dtype=float)
+
+    # Фолбэк на линейную оценку, если оптимизация не дала корректного результата.
+    if not np.isfinite(best_val) or best_val < 0:
+        if not mask.any():
+            return 0.0, np.zeros(6)
+        lin_val, lin_x = get_maxdev_linear_ellipsoid_with_vector(xf, std_pos, std_vel, radius)
+        if verbose:
+            print('[opt-ell/vec] fallback to linear ellipsoid, val=', lin_val)
+        return lin_val, lin_x
 
     best_norm = np.sqrt(max(best_val, 0.0))
     x_best = d * (best_u if best_u is not None else np.zeros(6))
@@ -1641,7 +1675,12 @@ def get_maxdev_optimization_ellipsoid_integrate(
             best_val = float(val)
             best_u = np.array(res.x, dtype=float)
 
-    best_norm = np.sqrt(max(best_val, 0.0))
+    best_norm = np.sqrt(max(best_val, 0.0)) if np.isfinite(best_val) else np.nan
+
+    if not np.isfinite(best_norm):
+        # На случай полного срыва оптимизации возвращаем гарантированно конечную
+        # линейную оценку, чтобы не отдавать NaN на тепловую карту.
+        return get_maxdev_linear_ellipsoid(xf, std_pos, std_vel, radius)
 
     if verbose and best_u is not None:
         x_best = d * best_u

@@ -209,7 +209,7 @@ def main1():
 
 
 def main2():
-    deviation_graph('L1', 79, number_of_points=10_000, number_of_turns=1, grid_density=30)
+    deviation_graph('L2', 21, number_of_points=10_000, number_of_turns=1, grid_density=50)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from scipy.interpolate import make_interp_spline
 from utils.libration_sense import du2km
 
 
-file_path = "../data/output/coefficients_wide/L1.csv"
+file_path = "data/output/L1_linear_ellipsoid.csv"
 print(file_path)
 df = pd.read_csv(file_path)
 

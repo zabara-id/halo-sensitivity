@@ -11,14 +11,15 @@ from utils.formula_creators import (
    alpha_finder_of_n, n_finder
 )
 
-ORBIT_TYPE = "L1"
-ORBIT_MIN, ORBIT_MAX = 1, 251
+ORBIT_TYPE = "L2"
+ORBIT_MIN, ORBIT_MAX = 1, 583
 GRID_DENSITY = 11
 SEED = None
 REUSE_NOISE = True
 AMOUNT_OF_POINTS = 11_000
+USE_MULTIPROCESS = True
 
-OUTPATH = "data/output/L1_test.csv"
+OUTPATH = "data/output/L2_samplnig_ellipsoid.csv"
 HEADER = ["Orbit Number", "T", "Alpha1", "Alpha2", "n", "Deviation Max"]
 
 
@@ -120,7 +121,7 @@ def ensure_outfile(path: str):
     return processed
 
 
-def main():
+def main(use_mp: bool = True):
     processed = ensure_outfile(OUTPATH)
     todo = [i for i in range(ORBIT_MIN, ORBIT_MAX + 1) if i not in processed]
     if not todo:
@@ -129,30 +130,37 @@ def main():
 
     print(f"К расчёту: {len(todo)} орбит(ы). Результат будет писаться по мере готовности в {OUTPATH}")
 
-    ctx = mp.get_context("spawn")
-    # чтобы не было овер-сабскрайба BLAS/NumPy в дочерних процессах, можно (опционально) перед запуском:
-    # os.environ.setdefault("OMP_NUM_THREADS", "1")
-    # os.environ.setdefault("MKL_NUM_THREADS", "1")
-
     with open(OUTPATH, "a", newline="") as f:
         writer = csv.writer(f)
 
-        # пул процессов
-        with ctx.Pool(processes=os.cpu_count()) as pool:
-            # imap_unordered возвращает результаты по мере готовности
-            total = len(todo)
-            done = 0
-            # chunksize подберите эмпирически (1–4). При «тяжёлых» тасках разницы почти нет.
-            for res in pool.imap_unordered(compute_one, todo, chunksize=1):
-                orbit_n, T, a1, a2, nperf, dmax_km, err = res
-                if err is None:
-                    writer.writerow([orbit_n, T, a1, a2, nperf, dmax_km])
-                    f.flush()
-                else:
-                    print(f"[ERROR] orbit {orbit_n}: {err}", file=sys.stderr)
-                done += 1
-                if done % 5 == 0 or done == total:
-                    print(f"[{done}/{total}] записано; последняя орбита: {orbit_n}{' (error)' if err else ''}")
+        total = len(todo)
+        done = 0
+
+        def handle_result(res):
+            nonlocal done
+            orbit_n, T, a1, a2, nperf, dmax_km, err = res
+            if err is None:
+                writer.writerow([orbit_n, T, a1, a2, nperf, dmax_km])
+                f.flush()
+            else:
+                print(f"[ERROR] orbit {orbit_n}: {err}", file=sys.stderr)
+            done += 1
+            if done % 5 == 0 or done == total:
+                print(f"[{done}/{total}] записано; последняя орбита: {orbit_n}{' (error)' if err else ''}")
+
+        if use_mp:
+            ctx = mp.get_context("spawn")
+            # чтобы не было овер-сабскрайба BLAS/NumPy в дочерних процессах, можно (опционально) перед запуском:
+            # os.environ.setdefault("OMP_NUM_THREADS", "1")
+            # os.environ.setdefault("MKL_NUM_THREADS", "1")
+
+            # пул процессов
+            with ctx.Pool(processes=os.cpu_count()) as pool:
+                for res in pool.imap_unordered(compute_one, todo, chunksize=1):
+                    handle_result(res)
+        else:
+            for orbit_n in todo:
+                handle_result(compute_one(orbit_n))
 
     print("Готово.")
 
@@ -162,7 +170,7 @@ if __name__ == "__main__":
     import time
     mp.freeze_support()
     start = time.time()
-    main()
+    main(use_mp=USE_MULTIPROCESS)
     print(f"Время выполнения {(time.time() - start) / 60} минут")
 
     sort_csv_inplace(OUTPATH, HEADER)
