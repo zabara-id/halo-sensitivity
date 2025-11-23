@@ -44,6 +44,11 @@ def quad_logistic(
     return baseline + logistic
 
 
+def gompertz_rise(x: np.ndarray, amplitude: float, rate: float, x0: float, offset: float) -> np.ndarray:
+    """Асимметричный рост Гомпертца: offset + A * exp(-exp(-rate*(x - x0)))."""
+    return offset + amplitude * np.exp(-np.exp(-rate * (x - x0)))
+
+
 def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Коэффициент детерминации R^2."""
     ss_res = np.sum((y_true - y_pred) ** 2)
@@ -77,6 +82,37 @@ class FitResult:
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         return quad_logistic(x, self.p0, self.p1, self.p2, self.A, self.k, self.x_mid, self.nu)
+
+def dmax_power_law(
+    t: np.ndarray,
+    amplitude: float,  # C
+    gamma: float,      # показатель степени
+    t_crit: float,     # критический период T_crit > max(t)
+    offset: float,     # d0
+) -> np.ndarray:
+    """
+    Степенная «почти-сингулярная» аппроксимация:
+        d(t) = offset + amplitude / (T_crit - t)^gamma,  t < T_crit.
+
+    При t << T_crit даёт почти горизонтальный участок,
+    при t -> T_crit^- обеспечивает очень резкий рост.
+    """
+    # защита от деления на ноль при численных флуктуациях
+    dt = np.clip(t_crit - t, 1e-3, np.inf)
+    return offset + amplitude / (dt ** gamma)
+
+
+@dataclass
+class DMaxFitResult:
+    label: str
+    amplitude: float   # C
+    rate: float        # gamma
+    x0: float          # T_crit
+    offset: float      # d0
+    r2: float
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        return dmax_power_law(x, self.amplitude, self.rate, self.x0, self.offset)
 
 
 def fit_alpha_curve(x: np.ndarray, y: np.ndarray, label: str) -> FitResult:
@@ -146,13 +182,82 @@ def print_result(result: FitResult) -> None:
     print(f"    {formula}")
 
 
+def fit_dmax_curve(t: np.ndarray, dmax: np.ndarray, label: str) -> DMaxFitResult:
+    """
+    Подбор степенной аппроксимации d(T) = d0 + C / (T_crit - T)^gamma
+    с мягкими границами на параметрах.
+    """
+    y = dmax
+    y_min = float(np.min(y))
+    y_med = float(np.median(y))
+    y_max = float(np.max(y))
+
+    # Базовый уровень — около нижнего квантиля
+    offset_guess = float(np.quantile(y, 0.10))
+
+    span_t = float(t.max() - t.min())
+    # Критический период немного правее области наблюдений
+    tcrit_guess = float(t.max() + 0.2 * span_t)
+    gamma_guess = 1.5
+
+    # Амплитуда так, чтобы примерно попадать в правый край
+    A_guess = (y_max - offset_guess) * (tcrit_guess - t.max()) ** gamma_guess
+
+    # (amplitude, gamma, t_crit, offset)
+    bounds = (
+        (
+            0.0,                  # amplitude >= 0
+            0.3,                  # gamma >= 0.3 (слишком малые дают почти логарифм)
+            t.max() + 1e-3,       # T_crit строго правее последней точки
+            max(0.0, y_min - 0.5 * (y_max - y_min)),
+        ),
+        (
+            np.inf,
+            5.0,                  # разумный верх для gamma
+            t.max() + 5.0,        # T_crit не уходит слишком далеко
+            y_med + 0.5 * (y_max - y_min),
+        ),
+    )
+
+    params, _ = curve_fit(
+        dmax_power_law,
+        t,
+        y,
+        p0=(A_guess, gamma_guess, tcrit_guess, offset_guess),
+        bounds=bounds,
+        maxfev=40000,
+    )
+    y_hat = dmax_power_law(t, *params)
+
+    return DMaxFitResult(
+        label=label,
+        amplitude=float(params[0]),
+        rate=float(params[1]),
+        x0=float(params[2]),
+        offset=float(params[3]),
+        r2=float(r2_score(y, y_hat)),
+    )
+
+
+
+def print_dmax_result(result: DMaxFitResult) -> None:
+    formula = (
+        f"{result.label}(T) = {result.offset:.5f} + "
+        f"{result.amplitude:.5f} / (T_crit - T)^{result.rate:.3f}, "
+        f"T_crit = {result.x0:.3f}"
+    )
+    print(f"{result.label}: степенной хвост с критическим периодом, R^2 = {result.r2:.4f}")
+    print(f"    {formula}")
+
+
 def plot_with_dev(
     t: np.ndarray,
     alpha1: np.ndarray,
     alpha2: np.ndarray,
-    dev_max: np.ndarray,
+    dev_max_thousand: np.ndarray,
     fit1: FitResult,
     fit2: FitResult,
+    fit_dev: DMaxFitResult,
 ) -> None:
     """Построение в стиле graphL2: точки, наши кривые и d_max справа."""
     import matplotlib.pyplot as plt
@@ -181,7 +286,7 @@ def plot_with_dev(
     )
 
     ax1.set_xlabel(r"T [дни]", fontsize=16)
-    ax1.set_ylabel(r"$\alpha_1$, $\alpha_2$ [безразм. ед.]", fontsize=16)
+    ax1.set_ylabel(r"$\alpha_1$, $\alpha_2$ [-]", fontsize=16)
     ax1.grid(True, which="both", axis="both", linestyle="--", alpha=0.5)
 
     # Правая ось для d_max
@@ -191,14 +296,21 @@ def plot_with_dev(
     ax2.spines["right"].set_color("red")
     ax2.tick_params(axis="y", colors="red")
     ax2.yaxis.label.set_color("red")
-    line3 = ax2.plot(
+    ax2.scatter(
         t,
-        du2km(dev_max) / 1000.0,
+        dev_max_thousand,
         color="red",
-        linestyle="-",
+        s=20,
+        alpha=0.7,
         marker="D",
-        markersize=4,
-        label="d_max",
+    )
+    line3 = ax2.plot(
+        np.linspace(t.min(), t.max(), 800),
+        fit_dev.predict(np.linspace(t.min(), t.max(), 800)),
+        color="red",
+        linewidth=2.5,
+        linestyle="--",
+        label=r"$d_{max}$ fit",
     )[0]
 
     legend1 = ax1.legend([line1, line2], [line1.get_label(), line2.get_label()], loc="center left", fontsize=14)
@@ -214,14 +326,18 @@ def plot_with_dev(
 def run_fit_and_plot() -> None:
     """Запуск без аргументов: фит, печать параметров и отрисовка графика."""
     t, alpha1, alpha2, dev_max = load_alpha_data(DEFAULT_DATA)
+    dev_max_thousand = du2km(dev_max) / 1000.0
     fit1 = fit_alpha_curve(t, alpha1, "Alpha1")
     fit2 = fit_alpha_curve(t, alpha2, "Alpha2")
+    fit_dev = fit_dmax_curve(t, dev_max_thousand, "d_max")
 
     print("Параметризация: f(T) = p0 + p1*T + p2*T^2 + A / (1 + exp(k*(T - T_mid)))^(1/nu)")
     print_result(fit1)
     print_result(fit2)
+    print("Параметризация d_max: d(T) = offset + A * exp(-exp(-rate * (T - T0)))")
+    print_dmax_result(fit_dev)
 
-    plot_with_dev(t, alpha1, alpha2, dev_max, fit1, fit2)
+    plot_with_dev(t, alpha1, alpha2, dev_max_thousand, fit1, fit2, fit_dev)
 
 
 if __name__ == "__main__":

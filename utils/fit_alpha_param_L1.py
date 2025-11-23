@@ -214,7 +214,7 @@ def plot_with_dev(
     )
 
     ax1.set_xlabel(r"$z_0$ [тыс. км]", fontsize=16)
-    ax1.set_ylabel(r"$\alpha_1$, $\alpha_2$ [безразм. ед.]", fontsize=16)
+    ax1.set_ylabel(r"$\alpha_1$, $\alpha_2$ [-]", fontsize=16)
     ax1.grid(True, which="both", axis="both", linestyle="--", alpha=0.5)
 
     # Правая ось для d_max

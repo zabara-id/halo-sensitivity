@@ -1,8 +1,7 @@
-import pandas as pd
-import os
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline
+import numpy as np
+import pandas as pd
+
 from utils.libration_sense import du2km
 
 
@@ -17,37 +16,16 @@ alpha1 = df['Alpha1'].values
 alpha2 = df['Alpha2'].values
 dev_max = df['Deviation Max'].values
 
-# --- Функция для сглаживания данных сплайном ---
-def spline_smooth(x, y, num_points_spline=300, k=5):
-    """
-    x, y - исходные массивы,
-    num_points_spline - на сколько точек интерполировать,
-    k - степень сплайна (3 = кубический).
-    Возвращает (x_s, y_s) - сглаженные массивы.
-    """
-    x_smooth = np.linspace(x.min(), x.max(), num_points_spline)
-    spline = make_interp_spline(x, y, k=k)
-    y_smooth = spline(x_smooth)
-    return x_smooth, y_smooth
-
-# Сглаживаем Alpha1 и Alpha2
-z0_alpha1_smooth, alpha1_smooth = spline_smooth(z0, alpha1)
-z0_alpha2_smooth, alpha2_smooth = spline_smooth(z0, alpha2)
-
 # Создаем фигуру и два объекта осей
 fig, ax1 = plt.subplots(figsize=(12, 8))
 
 # --- Левая ось: Alpha1 и Alpha2 ---
 ax1.set_xlabel(r'$z_0$ [тыс. км]', fontsize=16)
-ax1.set_ylabel(r'$\alpha_1$, $\alpha_2$ [безразм. ед.]', fontsize=16)
+ax1.set_ylabel(r'$\alpha_1$, $\alpha_2$ [-]', fontsize=16)
 
 # 1) Точки (scatter) для Alpha1/Alpha2
-ax1.scatter(z0, alpha1, color='blue', s=20, label='Alpha1', alpha=0.6)
-ax1.scatter(z0, alpha2, color='green', s=20, label='Alpha2', alpha=0.6)
-
-# 2) Сглаженные линии
-line1, = ax1.plot(z0_alpha1_smooth, alpha1_smooth, color='blue', linewidth=2, label=r'$\alpha_1$')
-line2, = ax1.plot(z0_alpha2_smooth, alpha2_smooth, color='green', linewidth=2, label=r'$\alpha_2$')
+scatter1 = ax1.scatter(z0, alpha1, color='blue', s=20, label='Alpha1', alpha=0.6)
+scatter2 = ax1.scatter(z0, alpha2, color='green', s=20, label='Alpha2', alpha=0.6)
 
 # Сетка для наглядности
 ax1.grid(True, which='both', axis='both', linestyle='--', alpha=0.5)
@@ -62,14 +40,14 @@ ax2.spines['right'].set_color('red')
 ax2.tick_params(axis='y', colors='red')
 ax2.yaxis.label.set_color('red')
 
-line3 = ax2.plot(z0, np.array([du2km(x) for x in dev_max]) / 1000, color='red', linestyle='-', marker='D', markersize=4, 
-                 label=r'$d_{max}$')[0]
+scatter3 = ax2.scatter(z0, np.array([du2km(x) for x in dev_max]) / 1000, color='red', s=16, marker='D', alpha=0.7,
+                       label=r'$d_{max}$')
 
 # Собираем легенду
-lines_1 = [line1, line2]
-lines_2 = [line3]
-labels_1 = [l.get_label() for l in lines_1]
-labels_2 = [l.get_label() for l in lines_2]
+lines_1 = [scatter1, scatter2]
+lines_2 = [scatter3]
+labels_1 = [h.get_label() for h in lines_1]
+labels_2 = [h.get_label() for h in lines_2]
 
 # У ax1 будет своя легенда (Alpha1, Alpha2)
 legend1 = ax1.legend(lines_1, labels_1, loc='center left', fontsize=14)

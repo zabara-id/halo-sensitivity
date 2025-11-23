@@ -18,7 +18,7 @@ fig, ax1 = plt.subplots(figsize=(12, 8))
 
 # --- Левая ось: Alpha1 и Alpha2 ---
 ax1.set_xlabel(r'T [дни]', fontsize=16)
-ax1.set_ylabel(r'$\alpha_1$, $\alpha_2$ [безразм. ед.]', fontsize=16)
+ax1.set_ylabel(r'$\alpha_1$, $\alpha_2$ [-]', fontsize=16)
 
 # 1) Точки (scatter) для Alpha1/Alpha2
 scatter1 = ax1.scatter(T_array, alpha1, color='blue', s=20, label=r'$\alpha_1$', alpha=0.6)
