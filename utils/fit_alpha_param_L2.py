@@ -309,7 +309,7 @@ def plot_with_dev(
         fit_dev.predict(np.linspace(t.min(), t.max(), 800)),
         color="red",
         linewidth=2.5,
-        linestyle="--",
+        linestyle="-",
         label=r"$d_{max}$ fit",
     )[0]
 

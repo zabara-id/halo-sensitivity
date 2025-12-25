@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import ScalarFormatter
 
 
 def _csv_path(project_root: str, orbit_type: str) -> str:
@@ -83,6 +84,10 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
         floquet,
     ) = _load_ellipsoid_data(orbit_type)
 
+    label_fontsize = 15
+    legend_fontsize = 11
+    tick_fontsize = 13
+
     fig, (ax_abs, ax_ratio, ax_mul) = plt.subplots(
         3,
         1,
@@ -90,6 +95,8 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
         figsize=(11, 8),
         gridspec_kw={"height_ratios": [2.0, 1.6, 1.2]},
     )
+    sci_formatter = ScalarFormatter(useMathText=True)
+    sci_formatter.set_powerlimits((3, 3))
 
     # 1) Абсолютные отклонения
     ax_abs.plot(
@@ -129,9 +136,11 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
         linestyle="--",
     )
 
-    ax_abs.set_ylabel(r'$d_{\max}$ [км]', fontsize=11)
+    ax_abs.set_ylabel(r'$d_{\max}$ [км]', fontsize=label_fontsize)
     ax_abs.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
-    ax_abs.legend(loc="upper right", fontsize=9, framealpha=0.9)
+    ax_abs.legend(loc="upper right", fontsize=legend_fontsize, framealpha=0.9)
+    ax_abs.yaxis.set_major_formatter(sci_formatter)
+    ax_abs.tick_params(axis="both", labelsize=tick_fontsize)
 
     # 2) Отношения к IVP
     eps = 1e-9
@@ -173,9 +182,13 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
         linestyle="--",
     )
 
-    ax_ratio.set_ylabel(r'$d_{\max}^{method} / d_{\max}^{\text{IVP-opt}}$ [-]', fontsize=11)
+    ax_ratio.set_ylabel(
+        r'$d_{\max}^{method} / d_{\max}^{\text{IVP-opt}}$ [-]',
+        fontsize=label_fontsize,
+    )
     ax_ratio.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
-    ax_ratio.legend(loc="upper right", fontsize=9, framealpha=0.9)
+    ax_ratio.legend(loc="upper right", fontsize=legend_fontsize, framealpha=0.9)
+    ax_ratio.tick_params(axis="both", labelsize=tick_fontsize)
     # ax_ratio.set_yscale("log")
 
     # 3) MAX_MUL отдельно
@@ -186,12 +199,16 @@ def plot_ellipsoid_deviation(orbit_type: str = "L1") -> None:
         linewidth=1.3,
         linestyle="-.",
     )
-    ax_mul.set_xlabel(r"Порядковый номер гало-орбиты семейства $L_2$ [-]", fontsize=11)
+    ax_mul.set_xlabel(
+        r"Порядковый номер гало-орбиты семейства $L_2$ [-]",
+        fontsize=label_fontsize,
+    )
 
-    ax_mul.set_ylabel(r'$\mu_{\max}$ [-]', fontsize=11)
+    ax_mul.set_ylabel(r'$\mu_{\max}$ [-]', fontsize=label_fontsize)
     ax_mul.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
     # ax_mul.legend(loc="upper right", fontsize=9, framealpha=0.9)
     ax_mul.set_yscale('log')
+    ax_mul.tick_params(axis="both", labelsize=tick_fontsize)
 
     ax_mul.set_xlim(orbit_nums.min(), orbit_nums.max())
 
