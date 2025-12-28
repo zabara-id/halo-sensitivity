@@ -5,7 +5,7 @@ import pandas as pd
 from utils.libration_sense import du2km
 
 
-file_path = "data/output/L1_linear_ellipsoid.csv"
+file_path = "data/output/L1_DA_opt.csv"
 print(file_path)
 df = pd.read_csv(file_path)
 
@@ -24,8 +24,8 @@ ax1.set_xlabel(r'$z_0$ [тыс. км]', fontsize=16)
 ax1.set_ylabel(r'$\alpha_1$, $\alpha_2$ [-]', fontsize=16)
 
 # 1) Точки (scatter) для Alpha1/Alpha2
-scatter1 = ax1.scatter(z0, alpha1, color='blue', s=20, label='Alpha1', alpha=0.6)
-scatter2 = ax1.scatter(z0, alpha2, color='green', s=20, label='Alpha2', alpha=0.6)
+scatter1 = ax1.scatter(z0, alpha1, color='blue', s=20, label=r'$\alpha_1$', alpha=0.6)
+scatter2 = ax1.scatter(z0, alpha2, color='green', s=20, label=r'$\alpha_2$', alpha=0.6)
 
 # Сетка для наглядности
 ax1.grid(True, which='both', axis='both', linestyle='--', alpha=0.5)

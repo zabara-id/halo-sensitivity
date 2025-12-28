@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from utils.libration_sense import du2km, tu2days
 
-file_path = "data/output/L2_linear_ellipsoid.csv"
+file_path = "data/output/L2_DA_opt.csv"
 
 df = pd.read_csv(file_path)
 
@@ -37,7 +37,7 @@ ax2.spines['right'].set_color('red')
 ax2.tick_params(axis='y', colors='red')
 ax2.yaxis.label.set_color('red')
 
-dev_max_k = du2km(dev_max) / 1000  # convert to thousand km
+dev_max_k = dev_max / 1000  # convert to thousand km
 scatter3 = ax2.scatter(T_array, dev_max_k, color='red', s=16, marker='D', label=r'$d_{max}$', alpha=0.7)
 
 # Собираем легенду

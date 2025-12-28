@@ -11,16 +11,16 @@ from utils.formula_creators import (
    alpha_finder_of_n, n_finder
 )
 
-ORBIT_TYPE = "L2"
-ORBIT_MIN, ORBIT_MAX = 1, 583
+ORBIT_TYPE = "L1"
+ORBIT_MIN, ORBIT_MAX = 1, 253
 GRID_DENSITY = 11
 SEED = None
 REUSE_NOISE = True
 AMOUNT_OF_POINTS = 11_000
 USE_MULTIPROCESS = True
 
-OUTPATH = "data/output/L2_samplnig_ellipsoid.csv"
-HEADER = ["Orbit Number", "T", "Alpha1", "Alpha2", "n", "Deviation Max"]
+OUTPATH = "data/output/L1_DA_opt.csv"
+HEADER = ["Orbit Number", "z0", "Alpha1", "Alpha2", "n", "Deviation Max"]
 
 
 def sort_csv_inplace(path: str, header: list[str]):
@@ -87,7 +87,7 @@ def compute_one(orbit_number: int):
         alpha1 = float(alpha[0])
         alpha2 = float(alpha[1])
 
-        return (orbit_number, float(T), alpha1, alpha2, float(n_perf), float(deviation_max_km), None)
+        return (orbit_number, float(z0), alpha1, alpha2, float(n_perf), float(deviation_max_km), None)
     except Exception as e: 
         # вернём ошибку, чтобы главный процесс мог залогировать и идти дальше
         return (orbit_number, None, None, None, None, None, str(e))

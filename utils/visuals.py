@@ -81,8 +81,8 @@ def deviation_graph(orbit_type: str,
     with DA.cache_manager():  # optional, for efficiency
         xfinal = RK78(initial_state, 0.0, number_of_turns * T, CR3BP)
 
-    std_pos_values = np.linspace(0, km2du(17), grid_density)
-    std_vel_values = np.linspace(0, kmS2vu(0.11e-3), grid_density)
+    std_pos_values = np.linspace(0, km2du(10), grid_density)
+    std_vel_values = np.linspace(0, kmS2vu(0.10e-3), grid_density)
 
     # Матрица для хранения результатов
     results = np.zeros((len(std_pos_values), len(std_vel_values)))
@@ -133,23 +133,23 @@ def deviation_graph(orbit_type: str,
                     #     std_vel
                     # )
 
-                    get_maxdev_linear_ellipsoid(
-                        xfinal,
-                        std_pos,
-                        std_vel,
-                        radius=3.0
-                    )
-
-                    # get_maxdev_optimization_ellipsoid(
-                    #     orbit_type,
-                    #     number_of_orbit,
+                    # get_maxdev_linear_ellipsoid(
                     #     xfinal,
                     #     std_pos,
                     #     std_vel,
-                    #     radius=3.0,
-                    #     n_random_starts=10,
-                    #     init_strategy="mixed_multistart"
+                    #     radius=3.0
                     # )
+
+                    get_maxdev_optimization_ellipsoid(
+                        orbit_type,
+                        number_of_orbit,
+                        xfinal,
+                        std_pos,
+                        std_vel,
+                        radius=3.0,
+                        n_random_starts=10,
+                        init_strategy="mixed_multistart"
+                    )
                 )
                 pbar.update(1)
 
@@ -199,7 +199,6 @@ def deviation_graph(orbit_type: str,
     # )
     plt.tick_params(axis='both', which='major', labelsize=12)
 
-    # ВАЖНО: без colorbar — просто не вызываем plt.colorbar()
     plt.show()
 
 
@@ -209,7 +208,7 @@ def main1():
 
 
 def main2():
-    deviation_graph('L2', 21, number_of_points=10_000, number_of_turns=1, grid_density=50)
+    deviation_graph('L2', 1, number_of_points=10_000, number_of_turns=1, grid_density=6)
 
 
 if __name__ == "__main__":

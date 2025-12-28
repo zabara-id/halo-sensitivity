@@ -1415,15 +1415,16 @@ def get_maxdev_optimization_ellipsoid(
             best_val = float(val)
             best_u = np.array(res.x, dtype=float)
 
-    # Если все старты «упали» (best_val так и остался -inf/отрицательный),
-    # возвращаем устойчивую линейную оценку, чтобы избежать NaN/нулей на карте.
-    if not np.isfinite(best_val) or best_val < 0:
+    # защита от вырожденных случаев
+    if du2km(best_val) > 1e5:
+        print("Вырождение. Переход в режим расчёта IVP-opt")
         if not mask.any():
             return 0.0
-        lin_val = get_maxdev_linear_ellipsoid(xf, std_pos, std_vel, radius)
+        # lin_val = get_maxdev_linear_ellipsoid(xf, std_pos, std_vel, radius)
+        new_val = get_maxdev_optimization_ellipsoid_integrate(orbit_type, number_of_orbit, xf, std_pos, std_vel, radius)
         if verbose:
-            print('[opt-ell] fallback to linear ellipsoid, val=', lin_val)
-        return lin_val
+            print('[opt-ell] fallback to linear ellipsoid, val=', new_val)
+        return new_val
 
     best_norm = np.sqrt(max(best_val, 0.0))
 

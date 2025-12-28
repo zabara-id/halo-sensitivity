@@ -96,8 +96,8 @@ def n_finder(
     reuse_noise: bool = True,
 ) -> float:
     
-    std_pos_values = np.linspace(0, km2du(17), grid_density)  # от 0 до 17 км
-    std_vel_values = np.linspace(0, kmS2vu(0.11e-3), grid_density)  # от 0 до 0.11 м / с
+    std_pos_values = np.linspace(0, km2du(10), grid_density)  # от 0 до 10 км
+    std_vel_values = np.linspace(0, kmS2vu(0.10e-3), grid_density)  # от 0 до 0.10 см / с
 
     # Генерируем матрицу A и вектор y
     N = grid_density**2
@@ -141,21 +141,21 @@ def n_finder(
         #     radius=3.0
         # )
 
-        # y_du[index] = get_maxdev_optimization_ellipsoid(
-        #     orbit_type,
-        #     number_of_orbit,
-        #     xf,
-        #     std_pos,
-        #     std_vel,
-        #     radius=3.0
-        # )
-
-        y_du[index] = get_maxdev_linear_ellipsoid(
+        y_du[index] = get_maxdev_optimization_ellipsoid(
+            orbit_type,
+            number_of_orbit,
             xf,
             std_pos,
             std_vel,
             radius=3.0
         )
+
+        # y_du[index] = get_maxdev_linear_ellipsoid(
+        #     xf,
+        #     std_pos,
+        #     std_vel,
+        #     radius=3.0
+        # )
 
         index += 1
 
